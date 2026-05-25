@@ -12,8 +12,12 @@ curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/inst
 
 Alternative implementations live under `variants/`:
 
-| Variant | Description | Install |
-|---|---|---|
-| [`variants/roguedbear-statusline.sh`](variants/roguedbear-statusline.sh) | Multi-line stacked layout (`┌─├─└─`) with three-column tabular alignment, reset timers next to the 5h/7d bars, and a now-playing line with a live progress bar. Sources: YTMDesktop Companion Server + Spotify. See [`YOUTUBE_MUSIC.md`](YOUTUBE_MUSIC.md) for setup. | `curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh \| sh` |
+### [`variants/roguedbear-statusline.sh`](variants/roguedbear-statusline.sh)
 
-Variants are standalone scripts — the one-liner above installs the script under `~/.claude/` and points `~/.claude/settings.json` at it. To switch variants by hand, edit `statusLine.command` directly.
+Multi-line stacked layout (`┌─├─└─`) with three-column tabular alignment, reset timers next to the 5h/7d bars, and a now-playing line with a live progress bar. Sources: YTMDesktop Companion Server + Spotify. See [`YOUTUBE_MUSIC.md`](YOUTUBE_MUSIC.md) for setup.
+
+```
+curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh | sh
+```
+
+Variants are standalone scripts — the installer drops the script under `~/.claude/` and points `~/.claude/settings.json` at it. To switch variants by hand, edit `statusLine.command` directly.
