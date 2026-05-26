@@ -20,6 +20,18 @@ Restart Claude Code after install.
 
 Alternative implementations live under `variants/`. Each is a standalone script; the installer drops it under `~/.claude/` and points `~/.claude/settings.json` at it. To switch variants by hand, edit `statusLine.command` directly.
 
+### [`pie-statusline`](variants/pie-statusline.sh)
+
+Single-line, compact variant that swaps bar graphs for pie-chart glyphs (`○ ◔ ◑ ◕ ●`). One character per metric, color-coded by usage; reset timers shown in parentheses.
+
+```
+Claude Opus 4.7 high  ◔ ctx 23%  ◑ 5h 42% (2h17m)  ◔ 7d 18% (4d)  $1.42  +127/-43  23m  ◔ cpu 18%  ◑ ram 64%  ● bat 87%+  ♪ Tame Impala — The Less I Know  ☀️ +18°C
+```
+
+```
+curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-pie-statusline.sh | sh
+```
+
 ### [`roguedbear-statusline`](variants/roguedbear-statusline.sh)
 
 Multi-line stacked layout with three-column tabular alignment, reset timers next to the 5h/7d bars, and a now-playing line with a live progress bar. Sources: YTMDesktop Companion Server + Spotify. See [`YOUTUBE_MUSIC.md`](YOUTUBE_MUSIC.md) for setup.
