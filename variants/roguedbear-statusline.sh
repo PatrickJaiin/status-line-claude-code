@@ -32,6 +32,7 @@ h5_reset=$(jq -r '.rate_limits.five_hour.resets_at // empty'            <<<"$inp
 d7=$(jq -r '.rate_limits.seven_day.used_percentage // 0'                <<<"$input" | cut -d. -f1)
 d7_reset=$(jq -r '.rate_limits.seven_day.resets_at // empty'            <<<"$input")
 cost=$(jq -r '.cost.total_cost_usd // empty'                            <<<"$input")
+total_input_tokens=$(jq -r '.context_window.total_input_tokens // empty' <<<"$input")
 lines_added=$(jq -r '.cost.total_lines_added // 0'                      <<<"$input")
 lines_removed=$(jq -r '.cost.total_lines_removed // 0'                  <<<"$input")
 duration_ms=$(jq -r '.cost.total_duration_ms // empty'                  <<<"$input")
@@ -342,7 +343,7 @@ join_segs() {
 }
 
 # ── Segments ───────────────────────────────────────────────────────────
-seg_cpu=""; seg_ram=""; seg_bat=""; seg_weather=""; seg_dur=""; seg_cost=""
+seg_cpu=""; seg_ram=""; seg_bat=""; seg_weather=""; seg_dur=""; seg_cost=""; seg_tokens=""
 [[ -n "$cpu_pct"  ]] && { cc=$(color_for_pct "$cpu_pct"); seg_cpu="${cc}cpu ${cpu_pct}%${RESET}"; }
 [[ -n "$ram_pct"  ]] && { rc=$(color_for_pct "$ram_pct"); seg_ram="${rc}ram ${ram_pct}%${RESET}"; }
 [[ -n "$bat_str"  ]] && seg_bat="${bat_color}${bat_str}${RESET}"
@@ -350,7 +351,18 @@ seg_cpu=""; seg_ram=""; seg_bat=""; seg_weather=""; seg_dur=""; seg_cost=""
 [[ -n "$dur_str"  ]] && seg_dur="${DIM}${dur_str}${RESET}"
 [[ -n "$cost_str" ]] && seg_cost="${MAGENTA}${cost_str}${RESET}"
 
-durcost_line=$(join_segs "$seg_dur" "$seg_cost")
+if [[ -n "$total_input_tokens" && "$total_input_tokens" =~ ^[0-9]+$ ]]; then
+  if   (( total_input_tokens >= 1000000 )); then
+    tok_label=$(awk -v t="$total_input_tokens" 'BEGIN { printf "%.1fM tok", t / 1000000 }')
+  elif (( total_input_tokens >= 1000 )); then
+    tok_label=$(awk -v t="$total_input_tokens" 'BEGIN { printf "%.1fk tok", t / 1000 }')
+  else
+    tok_label="${total_input_tokens} tok"
+  fi
+  seg_tokens="${CYAN}${tok_label}${RESET}"
+fi
+
+durcost_line=$(join_segs "$seg_dur" "$seg_cost" "$seg_tokens")
 
 # Dynamic verdict — shifts with context window pressure
 if   (( ctx >= 80 )); then status_v="${RED}cooked 💀${RESET}";       vibes_v="${DIM}time to commit${RESET}"
