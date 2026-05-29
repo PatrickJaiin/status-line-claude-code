@@ -140,8 +140,36 @@ cache_swr() {
   fi
 }
 
+# Resolve location via CoreLocationCLI → whereami → empty (IP fallback).
+# Cached for 1h so we don't poke macOS Location Services every refresh.
+get_coords() {
+  local coords="" raw="" lat="" lon=""
+  if command -v CoreLocationCLI >/dev/null 2>&1; then
+    coords=$(CoreLocationCLI -once -format "%latitude,%longitude" 2>/dev/null \
+      | tr -d ' ' | grep -E '^-?[0-9.]+,-?[0-9.]+$' | head -1)
+  fi
+  if [[ -z "$coords" ]] && command -v whereami >/dev/null 2>&1; then
+    raw=$(whereami 2>/dev/null)
+    lat=$(printf '%s' "$raw" | awk -F': *' '/Latitude:/  {print $2; exit}')
+    lon=$(printf '%s' "$raw" | awk -F': *' '/Longitude:/ {print $2; exit}')
+    [[ -n "$lat" && -n "$lon" ]] && coords="${lat},${lon}"
+  fi
+  printf '%s' "$coords"
+}
+
+refresh_coords() {
+  get_coords
+}
+
 refresh_weather() {
-  curl -fsS --max-time 3 'wttr.in/?format=%c+%t' 2>/dev/null | tr -d '\n'
+  local coords path
+  coords=$(cat "$CACHE_DIR/coords" 2>/dev/null)
+  if [[ -n "$coords" ]]; then
+    path="wttr.in/${coords}"
+  else
+    path="wttr.in/"
+  fi
+  curl -fsS --max-time 3 "${path}?format=%c+%t" 2>/dev/null | tr -d '\n'
 }
 
 refresh_sysstat() {
@@ -235,6 +263,7 @@ if [[ -n "$duration_ms" ]]; then
   fi
 fi
 
+cache_swr coords 3600 refresh_coords >/dev/null
 weather=$(cache_swr weather 600 refresh_weather)
 sysstat=$(cache_swr sysstat 5 refresh_sysstat)
 np=$(cache_swr nowplaying 6 refresh_nowplaying)

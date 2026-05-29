@@ -141,16 +141,44 @@ APPLESCRIPT
   fi
 fi
 
-# Weather (cached ~10min)
+# Location (GPS via CoreLocationCLI → whereami → IP fallback). Cached 1h.
+coords=""
+coord_cache="/tmp/.claude_pie_coords"
+coord_ts_cache="/tmp/.claude_pie_coords_ts"
+coord_last=0
+[ -f "$coord_ts_cache" ] && coord_last=$(cat "$coord_ts_cache" 2>/dev/null || echo 0)
+now=$(date +%s)
+if [ $((now - coord_last)) -gt 3600 ] || [ ! -f "$coord_cache" ]; then
+  if command -v CoreLocationCLI >/dev/null 2>&1; then
+    coords=$(CoreLocationCLI -once -format "%latitude,%longitude" 2>/dev/null \
+      | tr -d ' ' | grep -E '^-?[0-9.]+,-?[0-9.]+$' | head -1)
+  fi
+  if [ -z "$coords" ] && command -v whereami >/dev/null 2>&1; then
+    raw=$(whereami 2>/dev/null)
+    lat=$(printf '%s' "$raw" | awk -F': *' '/Latitude:/  {print $2; exit}')
+    lon=$(printf '%s' "$raw" | awk -F': *' '/Longitude:/ {print $2; exit}')
+    [ -n "$lat" ] && [ -n "$lon" ] && coords="${lat},${lon}"
+  fi
+  printf '%s' "$coords" > "$coord_cache"
+  printf '%s' "$now"    > "$coord_ts_cache"
+else
+  coords=$(cat "$coord_cache" 2>/dev/null)
+fi
+
+# Weather (cached ~10min). Uses GPS coords if available, else IP.
 weather=""
 weather_cache="/tmp/.claude_pie_weather"
 weather_ts_cache="/tmp/.claude_pie_weather_ts"
-now=$(date +%s)
 last=0
 [ -f "$weather_ts_cache" ] && last=$(cat "$weather_ts_cache" 2>/dev/null || echo 0)
 age=$((now - last))
 if [ "$age" -gt 600 ] || [ ! -f "$weather_cache" ]; then
-  fetched=$(curl -sf --max-time 3 "https://wttr.in/?format=%c+%t" 2>/dev/null)
+  if [ -n "$coords" ]; then
+    wttr_path="https://wttr.in/${coords}"
+  else
+    wttr_path="https://wttr.in/"
+  fi
+  fetched=$(curl -sf --max-time 3 "${wttr_path}?format=%c+%t" 2>/dev/null)
   if [ -n "$fetched" ]; then
     printf '%s' "$fetched" > "$weather_cache"
     printf '%s' "$now"     > "$weather_ts_cache"
