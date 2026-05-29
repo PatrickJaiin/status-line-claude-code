@@ -336,6 +336,11 @@ fi
 COL2=46
 COL3=62
 
+# Drop into stacked layout when the terminal is too narrow for the 3-column
+# arrangement (COL3 = right edge of col3 label; allow ~12 cols for the value).
+NARROW=0
+(( term_cols < COL3 + 12 )) && NARROW=1
+
 render_bar_row() {
   local label=$1 pct=$2 reset_info=$3 col2=$4 col3=$5
   local row pad
@@ -344,20 +349,44 @@ render_bar_row() {
   row+=$(printf ' %s%3d%%%s' "$DIM" "$pct" "$RESET")
   [[ -n "$reset_info" ]] && row+=$(printf ' %sresets %s%s' "$DIM" "$reset_info" "$RESET")
 
-  if [[ -n "$col2" ]]; then
-    pad=$(( COL2 - $(visible_len "$row") ))
-    (( pad < 2 )) && pad=2
-    row+=$(printf '%*s' "$pad" '')
-    row+="$col2"
-  fi
-  if [[ -n "$col3" ]]; then
-    pad=$(( COL3 - $(visible_len "$row") ))
-    (( pad < 2 )) && pad=2
-    row+=$(printf '%*s' "$pad" '')
-    row+="$col3"
+  if (( ! NARROW )); then
+    if [[ -n "$col2" ]]; then
+      pad=$(( COL2 - $(visible_len "$row") ))
+      (( pad < 2 )) && pad=2
+      row+=$(printf '%*s' "$pad" '')
+      row+="$col2"
+    fi
+    if [[ -n "$col3" ]]; then
+      pad=$(( COL3 - $(visible_len "$row") ))
+      (( pad < 2 )) && pad=2
+      row+=$(printf '%*s' "$pad" '')
+      row+="$col3"
+    fi
   fi
 
   printf '%s├─%s %b\n' "$ORANGE" "$RESET" "$row"
+}
+
+# In narrow mode, emit the right-column metrics as their own rows, wrapping
+# greedily so each row stays within the terminal.
+emit_narrow_rows() {
+  local max_w=$(( term_cols - 4 ))   # account for "├─ " prefix
+  (( max_w < 20 )) && max_w=20
+  local line="" line_w=0 seg seg_w sep_w=3   # " · " separator
+  for seg in "$@"; do
+    [[ -z "$seg" ]] && continue
+    seg_w=$(visible_len "$seg")
+    if [[ -z "$line" ]]; then
+      line="$seg"; line_w=$seg_w
+    elif (( line_w + sep_w + seg_w <= max_w )); then
+      line="${line}${SEP}${seg}"
+      line_w=$(( line_w + sep_w + seg_w ))
+    else
+      printf '%s├─%s %b\n' "$ORANGE" "$RESET" "$line"
+      line="$seg"; line_w=$seg_w
+    fi
+  done
+  [[ -n "$line" ]] && printf '%s├─%s %b\n' "$ORANGE" "$RESET" "$line"
 }
 
 join_segs() {
@@ -414,8 +443,24 @@ render_bar_row "ctx" "$ctx" ""               "$seg_cpu" "$seg_ram"
 render_bar_row "5h " "$h5"  "$h5_reset_str"  "$seg_bat" "$seg_weather"
 render_bar_row "7d " "$d7"  "$d7_reset_str"  ""         ""
 
-[[ -n "$durcost_line" ]] && printf '%s├─%s %b\n' "$ORANGE" "$RESET" "$durcost_line"
+if (( NARROW )); then
+  emit_narrow_rows "$seg_cpu" "$seg_ram" "$seg_bat" "$seg_weather"
+fi
 
-printf '%s├─%s %b\n' "$ORANGE" "$RESET" "$verdict"
+if [[ -n "$durcost_line" ]]; then
+  if (( NARROW )); then
+    emit_narrow_rows "$seg_dur" "$seg_cost" "$seg_tokens"
+  else
+    printf '%s├─%s %b\n' "$ORANGE" "$RESET" "$durcost_line"
+  fi
+fi
+
+if (( NARROW )); then
+  verdict_music=""
+  [[ -n "$music" ]] && verdict_music="$music"
+  emit_narrow_rows "status: ${status_v}" "vibes: ${vibes_v}" "$verdict_music"
+else
+  printf '%s├─%s %b\n' "$ORANGE" "$RESET" "$verdict"
+fi
 
 printf '%s└─$%s ' "$ORANGE" "$RESET"
