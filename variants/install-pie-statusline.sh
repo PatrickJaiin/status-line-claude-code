@@ -9,6 +9,18 @@ SRC_URL="https://github.com/PatrickJaiin/status-line-claude-code/raw/main/varian
 
 mkdir -p "$HOME/.claude"
 
+# Optional: install a GPS helper so weather pings the right place.
+if [ "${WITH_GPS:-0}" = "1" ]; then
+  if command -v CoreLocationCLI >/dev/null 2>&1 || command -v whereami >/dev/null 2>&1; then
+    echo "GPS helper already installed; skipping."
+  elif command -v brew >/dev/null 2>&1; then
+    echo "Installing CoreLocationCLI (you'll get a Location Services prompt on first use)..."
+    brew install corelocationcli || echo "WARN: corelocationcli install failed; will fall back to IP."
+  else
+    echo "WARN: WITH_GPS=1 set but Homebrew not found; weather will use IP geolocation."
+  fi
+fi
+
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL "$SRC_URL" -o "$DEST"
 elif command -v wget >/dev/null 2>&1; then
