@@ -173,7 +173,9 @@ refresh_weather() {
 }
 
 refresh_sysstat() {
-  top -l 1 -n 0 2>/dev/null | awk '
+  # `-l 2`: the second sample is the instantaneous reading (the first reports
+  # CPU usage averaged since boot). The awk below keeps the last CPU-usage line.
+  top -l 2 -n 0 2>/dev/null | awk '
     /CPU usage/ {
       for (i = 1; i <= NF; i++) {
         if ($i ~ /idle/) { gsub(/[^0-9.]/, "", $(i-1)); idle = $(i-1) }
