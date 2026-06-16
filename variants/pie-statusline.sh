@@ -46,7 +46,21 @@ color_for_pct() {
 time_until() {
   target="$1"
   now_ts=$(date +%s)
-  diff=$((target - now_ts))
+  # resets_at is an ISO-8601 string (what Claude Code sends) or a bare epoch;
+  # normalize to epoch — GNU `date -d` on Linux, BSD `date -j` fallback on macOS.
+  case "$target" in
+    ''|*[!0-9]*)
+      epoch=$(date -d "$target" "+%s" 2>/dev/null)
+      if [ -z "$epoch" ]; then
+        clean=${target%.*}; clean=${clean%Z}; clean=${clean%+*}
+        clean=${clean%-[0-9][0-9]:[0-9][0-9]}
+        epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$clean" "+%s" 2>/dev/null)
+      fi
+      [ -z "$epoch" ] && { printf '?'; return; }
+      ;;
+    *) epoch="$target" ;;
+  esac
+  diff=$((epoch - now_ts))
   if   [ "$diff" -le 0 ]; then printf 'now'
   elif [ "$diff" -ge 86400 ]; then printf '%dd' $((diff/86400))
   elif [ "$diff" -ge 3600 ];  then printf '%dh%02dm' $((diff/3600)) $(((diff%3600)/60))
@@ -88,21 +102,47 @@ if command -v pmset >/dev/null 2>&1; then
   if echo "$pmset_out" | grep -qE 'AC Power|charging'; then bat_charging="+"; fi
 fi
 
-# CPU + RAM (macOS top)
+# CPU + RAM via `top -l 2 -n 0`. The SECOND sample is the instantaneous reading;
+# the first reports usage averaged since boot. Two samples take ~2-3s, so we read
+# a cached value and refresh in the background — the render never blocks on top.
 cpu_pct=""
 ram_pct=""
 if command -v top >/dev/null 2>&1; then
-  top_out=$(top -l 1 -n 0 2>/dev/null)
-  cpu_idle=$(echo "$top_out" | awk -F'[:,]' '/CPU usage/ {
-    for (i=1;i<=NF;i++) if ($i ~ /idle/) { gsub(/[^0-9.]/,"",$i); print $i; exit }
-  }')
-  if [ -n "$cpu_idle" ]; then
-    cpu_pct=$(awk -v idle="$cpu_idle" 'BEGIN { v=100-idle; if(v<0)v=0; printf "%.0f", v }')
+  sysstat_cache="/tmp/.claude_pie_sysstat"
+  sysstat_ts_cache="/tmp/.claude_pie_sysstat_ts"
+  sys_now=$(date +%s)
+  sys_last=0
+  [ -f "$sysstat_ts_cache" ] && sys_last=$(cat "$sysstat_ts_cache" 2>/dev/null || echo 0)
+  if [ $((sys_now - sys_last)) -gt 5 ]; then
+    # Refresh in the background; this render uses whatever is already cached.
+    # stdout/stderr → /dev/null so the child never holds the render's pipe open.
+    {
+      sval=$(top -l 2 -n 0 2>/dev/null | awk '
+        /CPU usage/ {
+          for (i = 1; i <= NF; i++) {
+            if ($i ~ /idle/) { gsub(/[^0-9.]/, "", $(i-1)); idle = $(i-1) }
+          }
+        }
+        /^PhysMem/ {
+          used = $2
+          for (i = 1; i <= NF; i++) if ($i == "unused.") unused = $(i-1)
+        }
+        END {
+          cpu = (idle == "") ? 0 : 100 - idle
+          if (cpu < 0) cpu = 0
+          printf "%d|%s|%s", cpu, used, unused
+        }')
+      printf '%s' "$sval" > "$sysstat_cache.tmp" 2>/dev/null \
+        && mv "$sysstat_cache.tmp" "$sysstat_cache" 2>/dev/null
+      printf '%s' "$sys_now" > "$sysstat_ts_cache" 2>/dev/null
+    } >/dev/null 2>&1 &
   fi
-  phys=$(echo "$top_out" | grep -E '^PhysMem')
-  if [ -n "$phys" ]; then
-    used_raw=$(echo "$phys"   | sed -nE 's/.*PhysMem:[[:space:]]*([0-9]+[GMK]?) used.*/\1/p')
-    unused_raw=$(echo "$phys" | sed -nE 's/.*,[[:space:]]*([0-9]+[GMK]?) unused.*/\1/p')
+
+  sysstat=$(cat "$sysstat_cache" 2>/dev/null)
+  if [ -n "$sysstat" ]; then
+    cpu_pct=$(printf '%s' "$sysstat" | cut -d'|' -f1)
+    used_raw=$(printf '%s' "$sysstat" | cut -d'|' -f2)
+    unused_raw=$(printf '%s' "$sysstat" | cut -d'|' -f3)
     to_mb() {
       v="$1"
       n=$(printf '%s' "$v" | sed -E 's/[^0-9.]//g')
