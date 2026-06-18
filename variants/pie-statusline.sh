@@ -117,20 +117,34 @@ if command -v top >/dev/null 2>&1; then
     # Refresh in the background; this render uses whatever is already cached.
     # stdout/stderr → /dev/null so the child never holds the render's pipe open.
     {
-      sval=$(top -l 2 -n 0 2>/dev/null | awk '
+      # CPU: `-l 2`'s second sample is the instantaneous reading (the first
+      # reports usage averaged since boot). Keep the last idle figure.
+      idle=$(top -l 2 -n 0 2>/dev/null | awk '
         /CPU usage/ {
-          for (i = 1; i <= NF; i++) {
-            if ($i ~ /idle/) { gsub(/[^0-9.]/, "", $(i-1)); idle = $(i-1) }
-          }
+          for (i = 1; i <= NF; i++)
+            if ($i ~ /idle/) { gsub(/[^0-9.]/, "", $(i-1)); v = $(i-1) }
         }
-        /^PhysMem/ {
-          used = $2
-          for (i = 1; i <= NF; i++) if ($i == "unused.") unused = $(i-1)
-        }
+        END { print v }')
+      cpu=$(awk -v idle="$idle" 'BEGIN { c = (idle == "") ? 0 : 100 - idle; if (c < 0) c = 0; printf "%d", c }')
+
+      # RAM: top's "PhysMem ... used" counts reclaimable cached files as used, so
+      # it reads ~80%+ even when idle. Instead derive true usage from vm_stat the
+      # way Activity Monitor's "Memory Used" does: app memory (anonymous minus
+      # purgeable) + wired + compressed, as a fraction of physical RAM.
+      total=$(sysctl -n hw.memsize 2>/dev/null)
+      sval=$(vm_stat 2>/dev/null | awk -v total="$total" -v cpu="$cpu" '
+        /page size of/                  { page  = $8 }
+        /Pages wired down/              { wired = $4 }
+        /Pages occupied by compressor/  { comp  = $5 }
+        /Anonymous pages/               { anon  = $3 }
+        /Pages purgeable/               { purge = $3 }
         END {
-          cpu = (idle == "") ? 0 : 100 - idle
-          if (cpu < 0) cpu = 0
-          printf "%d|%s|%s", cpu, used, unused
+          gsub(/[^0-9]/, "", wired); gsub(/[^0-9]/, "", comp)
+          gsub(/[^0-9]/, "", anon);  gsub(/[^0-9]/, "", purge)
+          app  = anon - purge; if (app < 0) app = 0
+          used = (app + wired + comp) * page
+          pct  = (total > 0) ? used * 100 / total : 0
+          printf "%d|%d", cpu, pct
         }')
       printf '%s' "$sval" > "$sysstat_cache.tmp" 2>/dev/null \
         && mv "$sysstat_cache.tmp" "$sysstat_cache" 2>/dev/null
@@ -141,22 +155,10 @@ if command -v top >/dev/null 2>&1; then
   sysstat=$(cat "$sysstat_cache" 2>/dev/null)
   if [ -n "$sysstat" ]; then
     cpu_pct=$(printf '%s' "$sysstat" | cut -d'|' -f1)
-    used_raw=$(printf '%s' "$sysstat" | cut -d'|' -f2)
-    unused_raw=$(printf '%s' "$sysstat" | cut -d'|' -f3)
-    to_mb() {
-      v="$1"
-      n=$(printf '%s' "$v" | sed -E 's/[^0-9.]//g')
-      u=$(printf '%s' "$v" | sed -E 's/[0-9.]//g')
-      case "$u" in
-        G) awk -v n="$n" 'BEGIN{printf "%.0f", n*1024}' ;;
-        K) awk -v n="$n" 'BEGIN{printf "%.0f", n/1024}' ;;
-        *) awk -v n="$n" 'BEGIN{printf "%.0f", n}' ;;
-      esac
-    }
-    if [ -n "$used_raw" ] && [ -n "$unused_raw" ]; then
-      um=$(to_mb "$used_raw"); fm=$(to_mb "$unused_raw"); tm=$((um+fm))
-      [ "$tm" -gt 0 ] && ram_pct=$(awk -v u="$um" -v t="$tm" 'BEGIN{printf "%.0f", u*100/t}')
-    fi
+    ram_pct=$(printf '%s' "$sysstat" | cut -d'|' -f2)
+    # Guard against a stale cache from the previous (raw-MB) format.
+    case "$cpu_pct" in ''|*[!0-9]*) cpu_pct="" ;; esac
+    case "$ram_pct" in ''|*[!0-9]*) ram_pct="" ;; esac
   fi
 fi
 
