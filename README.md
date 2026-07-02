@@ -94,6 +94,8 @@ ships as a universal (x86_64+arm64) binary — so no Rosetta, unlike MTMR. The m
 experimental and uses undocumented APIs.
 
 Features:
+- **Opens from a "⌁" Control Strip button** — tap to bring up the bar, tap ✕ to close it and
+  hand the Touch Bar back to other apps/tools; the button stays put for reopening.
 - **Color-coded pills** (green/yellow/red by usage) with a playful **vibes** pill.
 - **Live cpu / ram / battery / clock** computed by Hammerspoon — the bar stays alive even when
   Claude is idle. (RAM uses reclaimable-page accounting, not macOS's cache-inflated "used".)

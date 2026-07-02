@@ -123,8 +123,10 @@ Next steps:
      System Settings → Privacy & Security → Accessibility → enable Hammerspoon.
      (Then in Hammerspoon's menu, Reload Config, or just relaunch the app.)
   2. Restart Claude Code so it picks up the new status line.
-  3. Look at the Touch Bar control strip (right side) — it shows:
+  3. Tap the "⌁" button in the Touch Bar control strip (right side) to open the bar:
      ⌁ model · ctx% · 5h · 7d · cost · cpu/ram/bat, color-coded, refreshing ~2s.
+     Tap ✕ to close it — the Touch Bar goes back to your other apps/tools and the ⌁
+     button stays in the control strip to reopen it anytime.
      When idle (no render for 90s) the Claude metrics dim to "idle".
 
 Notes:
