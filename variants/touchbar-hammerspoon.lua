@@ -8,6 +8,8 @@
 --   * live cpu / ram / battery / clock computed by Hammerspoon (alive even when Claude is idle)
 --   * now-playing (Spotify/Music) + weather, written into the cache by the shell script
 --   * live rate-limit countdowns (from absolute reset epochs)
+--   * lives behind a "⌁" Control Strip button — tap to open the bar, tap ✕ to close it and
+--     hand the Touch Bar back to other tools; the button stays put for reopening
 --   * drag a finger to scroll; auto-scrolls as a ticker when plugged in, static on battery
 --   * "ultracode" mode (high effort): shimmering label + spinner
 --
@@ -293,31 +295,33 @@ function M.start()
     end
   end)
 
-  -- Present in the wide app-region via a modal bar (the system-tray slot is too narrow).
+  -- The wide bar lives behind a "⌁" Control Strip button instead of forcing itself on screen
+  -- (a permanent modal bar starves other Touch Bar tools). Tapping the button presents the
+  -- modal bar and hides the button; the system dismiss button (✕) minimizes the bar and puts
+  -- the button back — so the status bar is one tap away whenever you want it.
   local item = touchbar.item.newCanvas(canvas, "claudeStatus"):canvasWidth(WIDTH)
   local bar = touchbar.bar.new()
   bar:templateItems({ item }); bar:defaultIdentifiers({ "claudeStatus" })
   M.item, M.bar = item, bar
 
-  local function present()
-    local visOk, vis = pcall(function() return bar:isVisible() end)
-    if visOk and vis then return end
-    pcall(function() bar:presentModalBar() end)
-  end
-  present()
+  M.trayBtn = touchbar.item.newButton("⌁")
+  M.trayBtn:callback(function()
+    layout(); render()  -- repaint before showing so the bar never opens stale
+    pcall(function() bar:presentModalBar(M.trayBtn, true) end)
+  end)
+  pcall(function() M.trayBtn:addToSystemTray(true) end)
 
   M.timer = hs.timer.doEvery(REFRESH, function() layout(); render() end)
-  M.keep  = hs.timer.doEvery(5, present)                       -- re-present if something replaced the bar
   M.powerWatcher = hs.battery.watcher.new(updatePower):start() -- plug in → ticker; unplug → static
   updatePower()
 end
 
 function M.stop()
   if M.timer then M.timer:stop() end
-  if M.keep then M.keep:stop() end
   if M.scrollTimer then M.scrollTimer:stop(); M.scrollTimer = nil end
   if M.powerWatcher then M.powerWatcher:stop() end
   if M.bar then pcall(function() M.bar:dismissModalBar() end) end
+  if M.trayBtn then pcall(function() M.trayBtn:addToSystemTray(false) end) end
 end
 
 pcall(M.start)  -- never let an error here break the rest of the user's Hammerspoon config
