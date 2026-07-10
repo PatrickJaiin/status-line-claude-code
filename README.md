@@ -54,6 +54,32 @@ With GPS:
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh | WITH_GPS=1 sh
 ```
 
+### Codex native footer
+
+Codex does not expose Claude Code's command-backed status-line hook. This installer configures
+the closest native RogueDBear layout using Codex's built-in footer items: model + reasoning,
+working directory, Git branch, context used, primary and secondary usage limits (for example,
+5-hour and weekly), used tokens, and run state.
+
+```
+curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-codex-statusline.sh | sh
+```
+
+It safely merges the settings into `$CODEX_HOME/config.toml` (default:
+`~/.codex/config.toml`), preserves other `[tui]` settings, and keeps the original config at
+`config.toml.bak`. It requires Codex CLI 0.129.0 or newer. Restart Codex after installation, or
+use `/statusline` to adjust the items.
+
+Codex's footer is a single line of built-in values, so the Claude variant's custom bars,
+CPU/RAM, battery, weather, music, cost, duration, and vibes text are not available. Those would
+require a separate terminal/tmux integration or a custom Codex build.
+
+To test the installer locally:
+
+```
+sh tests/test-install-roguedbear-codex-statusline.sh
+```
+
 ### [`pie-statusline`](variants/pie-statusline.sh)
 
 Single-line, compact variant that swaps bar graphs for pie-chart glyphs (`○ ◔ ◑ ◕ ●`). One character per metric, color-coded by usage; reset timers shown in parentheses.
