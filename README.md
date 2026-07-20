@@ -4,9 +4,7 @@ Status-line variants for [Claude Code](https://claude.com/claude-code) and [Code
 Pick one, paste its install command, restart Claude Code (or Codex). That's it.
 
 All Claude variants can show: context, rate limits, session cost, lines changed, duration,
-CPU/RAM, battery, now playing, and weather. Add `WITH_GPS=1` before `sh` for GPS-accurate
-weather (installs [CoreLocationCLI](https://github.com/fulldecent/corelocationcli); macOS will
-ask for Location permission once).
+CPU/RAM, battery, now playing, and weather (located by IP).
 
 | Variant | Style |
 |---|---|
@@ -19,15 +17,12 @@ ask for Location permission once).
 ## Classic
 
 ```
-Claude Opus 4.7  CTX [██▒▒▒▒▒▒▒▒] 23%  5h [████▒▒▒▒▒▒] 42% resets 2h17m  $1.42  …
+Claude Opus 4.7  effort:high  CTX [██▒▒▒▒▒▒▒▒] 23%  5h [████▒▒▒▒▒▒] 42% resets 2h17m
+7d [██▒▒▒▒▒▒▒▒] 18% resets 4d  $1.42  +127/-43  dur 23m  cpu 18%  ram 64%  bat 87%+
 ```
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/install.sh | sh
-```
-
-```sh
-curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/install.sh | WITH_GPS=1 sh
 ```
 
 ## RogueDBear
@@ -42,10 +37,6 @@ curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/inst
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh | sh
-```
-
-```sh
-curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh | WITH_GPS=1 sh
 ```
 
 <details>
@@ -67,10 +58,6 @@ Claude Opus 4.7  ◔ ctx 23%  ◑ 5h 42% (2h17m)  ◔ 7d 18% (4d)  $1.42  ◑ ra
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-pie-statusline.sh | sh
 ```
 
-```sh
-curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-pie-statusline.sh | WITH_GPS=1 sh
-```
-
 <details>
 <summary>Details</summary>
 
@@ -90,10 +77,6 @@ terminal keeps a minimal one-liner.
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-touchbar-hammerspoon.sh | sh
-```
-
-```sh
-curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-touchbar-hammerspoon.sh | WITH_GPS=1 sh
 ```
 
 After install, grant Hammerspoon **Accessibility** permission, then restart Claude Code.
