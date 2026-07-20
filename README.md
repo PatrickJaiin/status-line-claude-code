@@ -29,9 +29,11 @@ curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/inst
 
 ```
 ┌─ shiv  ~/repo  Claude Opus 4.7  (high)
-├─ ctx [●●○○○○○○○○]  23%                 cpu 18%   ram 64%
-├─ 5h  [●●●●○○○○○○]  42%  resets 2h17m   bat 87%+  ☀️ +18°C
-├─ dur 23m  ·  $1.42  ·  ♪ Tame Impala [●●●○○○○] 2:14
+├─ ctx [●●○○○○○○○○]  23%                         cpu 18%      ram 64%
+├─ 5h  [●●●●○○○○○○]  42%  resets 2h17m           bat 87%+     ☀️ +18°C
+├─ 7d  [●●○○○○○○○○]  18%  resets 4d
+├─ dur 23m  ·  $1.42  ·  12.3k tok
+├─ status: winning ✨  ·  vibes: cruising  ·  ♪ Tame Impala — The Less I Know [●●●○○○○○] 2:14/3:38
 └─$
 ```
 
