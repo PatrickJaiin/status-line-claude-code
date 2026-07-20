@@ -1,150 +1,176 @@
 # status-line-claude-code
 
-A Claude Code status line that surfaces context window, rate limits, session cost, lines changed, session duration, CPU/RAM, battery, current Spotify track, and weather.
+Status-line variants for [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex).
+Pick one, paste its install command, restart Claude Code (or Codex). That's it.
+
+All Claude variants can show: context, rate limits, session cost, lines changed, duration,
+CPU/RAM, battery, now playing, and weather. Add `WITH_GPS=1` before `sh` for GPS-accurate
+weather (installs [CoreLocationCLI](https://github.com/fulldecent/corelocationcli); macOS will
+ask for Location permission once).
+
+| Variant | Style |
+|---|---|
+| [Classic](#classic) | Two lines, bar graphs |
+| [RogueDBear](#roguedbear) | Stacked box layout, tabular columns |
+| [Pie](#pie) | One compact line, pie glyphs |
+| [Touch Bar](#touch-bar) | Pills on the MacBook Pro Touch Bar |
+| [Codex presets](#codex-presets) | Codex's native footer |
+
+## Classic
 
 ```
-Claude Opus 4.7  effort:high  CTX [██▒▒▒▒▒▒▒▒] 23%  5h [████▒▒▒▒▒▒] 42% resets 2h17m
-7d [██▒▒▒▒▒▒▒▒] 18% resets 4d  $1.42  +127/-43  dur 23m  cpu 18%  ram 64%  bat 87%+
-Tame Impala - The Less I Know   ☀️ +18°C
+Claude Opus 4.7  CTX [██▒▒▒▒▒▒▒▒] 23%  5h [████▒▒▒▒▒▒] 42% resets 2h17m  $1.42  …
 ```
 
-## Install
-
-Without GPS (weather location via IP):
-
-```
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/install.sh | sh
 ```
 
-With GPS (also installs [`CoreLocationCLI`](https://github.com/fulldecent/corelocationcli) for accurate weather location — first run triggers a macOS Location Services prompt):
-
-```
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/install.sh | WITH_GPS=1 sh
 ```
 
-Restart Claude Code after install.
-
-## Variants
-
-Alternative implementations live under `variants/`. Each is a standalone script; the installer drops it under `~/.claude/` and points `~/.claude/settings.json` at it. To switch variants by hand, edit `statusLine.command` directly. Both install commands below accept the same `WITH_GPS=1` opt-in.
-
-### [`roguedbear-statusline`](variants/roguedbear-statusline.sh)
-
-Multi-line stacked layout with three-column tabular alignment, reset timers next to the 5h/7d bars, and a now-playing line with a live progress bar. Sources: YTMDesktop Companion Server + Spotify. See [`YOUTUBE_MUSIC.md`](YOUTUBE_MUSIC.md) for setup.
+## RogueDBear
 
 ```
 ┌─ shiv  ~/repo  Claude Opus 4.7  (high)
-├─ ctx [●●○○○○○○○○]  23%                         cpu 18%      ram 64%
-├─ 5h  [●●●●○○○○○○]  42%  resets 2h17m           bat 87%+     ☀️ +18°C
-├─ 7d  [●●○○○○○○○○]  18%  resets 4d
-├─ dur 23m  ·  $1.42  ·  12.3k tok
-├─ status: winning ✨  ·  vibes: cruising  ·  ♪ Tame Impala — The Less I Know [●●●○○○○] 2:14
+├─ ctx [●●○○○○○○○○]  23%                 cpu 18%   ram 64%
+├─ 5h  [●●●●○○○○○○]  42%  resets 2h17m   bat 87%+  ☀️ +18°C
+├─ dur 23m  ·  $1.42  ·  ♪ Tame Impala [●●●○○○○] 2:14
 └─$
 ```
 
-Without GPS:
-
-```
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh | sh
 ```
 
-With GPS:
-
-```
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh | WITH_GPS=1 sh
 ```
 
-### Codex native footer
+<details>
+<summary>Details</summary>
 
-Codex does not expose Claude Code's command-backed status-line hook. This installer configures
-the closest native RogueDBear layout using Codex's built-in footer items: model + reasoning,
-working directory, Git branch, context used, primary and secondary usage limits (for example,
-5-hour and weekly), used tokens, and run state.
+Multi-line stacked layout ([`roguedbear-statusline.sh`](variants/roguedbear-statusline.sh)) with
+three-column tabular alignment, reset timers next to the 5h/7d bars, and a now-playing line with
+a live progress bar (YTMDesktop Companion Server + Spotify — see
+[`YOUTUBE_MUSIC.md`](YOUTUBE_MUSIC.md) for setup).
+</details>
 
-```
-curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-codex-statusline.sh | sh
-```
-
-It safely merges the settings into `$CODEX_HOME/config.toml` (default:
-`~/.codex/config.toml`), preserves other `[tui]` settings, and keeps the original config at
-`config.toml.bak`. It requires Codex CLI 0.129.0 or newer. Restart Codex after installation, or
-use `/statusline` to adjust the items.
-
-Codex's footer is a single line of built-in values, so the Claude variant's custom bars,
-CPU/RAM, battery, weather, music, cost, duration, and vibes text are not available. Those would
-require a separate terminal/tmux integration or a custom Codex build.
-
-To test the installer locally:
+## Pie
 
 ```
-sh tests/test-install-roguedbear-codex-statusline.sh
+Claude Opus 4.7  ◔ ctx 23%  ◑ 5h 42% (2h17m)  ◔ 7d 18% (4d)  $1.42  ◑ ram 64%  …
 ```
 
-### [`pie-statusline`](variants/pie-statusline.sh)
-
-Single-line, compact variant that swaps bar graphs for pie-chart glyphs (`○ ◔ ◑ ◕ ●`). One character per metric, color-coded by usage; reset timers shown in parentheses.
-
-```
-Claude Opus 4.7 high  ◔ ctx 23%  ◑ 5h 42% (2h17m)  ◔ 7d 18% (4d)  $1.42  +127/-43  23m  ◔ cpu 18%  ◑ ram 64%  ● bat 87%+  ♪ Tame Impala — The Less I Know  ☀️ +18°C
-```
-
-Without GPS:
-
-```
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-pie-statusline.sh | sh
 ```
 
-With GPS:
-
-```
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-pie-statusline.sh | WITH_GPS=1 sh
 ```
 
-### [`touchbar-statusline`](variants/touchbar-statusline.sh) — Touch Bar (Hammerspoon)
+<details>
+<summary>Details</summary>
 
-Renders the status on the **MacBook Pro Touch Bar** instead of the terminal. A shell script
-can't draw to the Touch Bar, and Claude's per-session metrics only arrive on the status-line
-command's stdin — so this variant bridges the two: the status-line script
-([`touchbar-statusline.sh`](variants/touchbar-statusline.sh)) writes a JSON cache
-(`~/.claude/touchbar/status.json`) on every render, and [Hammerspoon](https://www.hammerspoon.org)
-([`touchbar-hammerspoon.lua`](variants/touchbar-hammerspoon.lua)) reads that cache and paints the
-Touch Bar's wide app-region as a row of color-coded pills. The terminal keeps only a minimal one-liner.
+Single line ([`pie-statusline.sh`](variants/pie-statusline.sh)): bar graphs are replaced with
+pie glyphs (`○ ◔ ◑ ◕ ●`) — one character per metric, color-coded by usage, reset timers in
+parentheses.
+</details>
 
-```
-⚡ ULTRACODE Opus 4.8  🎯 locked in  ♪ Tame Impala — The Less I Know  🧠 context 23%  ⏳ 5h 42% · 2h17m  📅 7d 18% · 4d  💰 $1.42  🖥 cpu 18%  🧮 ram 64%  🔋 battery 87%+  ☀️ +18°C  🕐 14:21
-```
+## Touch Bar
 
-Why Hammerspoon: it's a **native Apple-Silicon** cask, and its Touch Bar module
-([`hs._asm.undocumented.touchbar`](https://github.com/asmagill/hs._asm.undocumented.touchbar))
-ships as a universal (x86_64+arm64) binary — so no Rosetta, unlike MTMR. The module is
-experimental and uses undocumented APIs.
-
-Features:
-- **Opens from a "⌁" Control Strip button** — tap to bring up the bar, tap ✕ to close it and
-  hand the Touch Bar back to other apps/tools; the button stays put for reopening.
-- **Color-coded pills** (green/yellow/red by usage) with a playful **vibes** pill.
-- **Live cpu / ram / battery / clock** computed by Hammerspoon — the bar stays alive even when
-  Claude is idle. (RAM uses reclaimable-page accounting, not macOS's cache-inflated "used".)
-- **Now playing** (Spotify / Apple Music) and **weather** (wttr.in), written into the cache by
-  the shell script using the same `osascript`/`wttr.in` approach as the other variants.
-- **Live rate-limit countdowns** from absolute reset epochs (accurate even between renders).
-- **Drag to scroll**; auto-scrolls as a **ticker when plugged in**, fully static on battery to
-  save power.
-- **Ultracode mode** (high effort): shimmering label + spinner.
-
-The installer adds Hammerspoon (via Homebrew), drops the universal module under `~/.hammerspoon/`,
-installs the Lua config and the cache writer, and wires `settings.json` (backing up anything it
-replaces). After install, grant Hammerspoon **Accessibility** permission and restart Claude Code.
-
-Without GPS (weather location via IP):
+Renders on the **MacBook Pro Touch Bar** via [Hammerspoon](https://www.hammerspoon.org); the
+terminal keeps a minimal one-liner.
 
 ```
+🧠 context 23%  ⏳ 5h 42% · 2h17m  💰 $1.42  🖥 cpu 18%  🔋 87%+  ☀️ +18°C  …
+```
+
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-touchbar-hammerspoon.sh | sh
 ```
 
-With GPS (also installs [`CoreLocationCLI`](https://github.com/fulldecent/corelocationcli) for
-accurate weather location):
-
-```
+```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-touchbar-hammerspoon.sh | WITH_GPS=1 sh
+```
+
+After install, grant Hammerspoon **Accessibility** permission, then restart Claude Code.
+
+<details>
+<summary>Details</summary>
+
+A shell script can't draw to the Touch Bar, and Claude's per-session metrics only arrive on the
+status-line command's stdin — so [`touchbar-statusline.sh`](variants/touchbar-statusline.sh)
+writes a JSON cache (`~/.claude/touchbar/status.json`) on every render, and
+[`touchbar-hammerspoon.lua`](variants/touchbar-hammerspoon.lua) reads it and paints the Touch
+Bar's wide app-region as a row of color-coded pills.
+
+- Opens from a "⌁" Control Strip button — tap to show, ✕ to hand the Touch Bar back.
+- Color-coded pills (green/yellow/red by usage) with a playful vibes pill.
+- Live cpu / ram / battery / clock computed by Hammerspoon — alive even when Claude is idle
+  (RAM uses reclaimable-page accounting, not macOS's cache-inflated "used").
+- Now playing (Spotify / Apple Music) and weather (wttr.in) from the cache writer.
+- Live rate-limit countdowns from absolute reset epochs.
+- Drag to scroll; auto-scrolls as a ticker when plugged in, static on battery.
+- Ultracode mode (high effort): shimmering label + spinner.
+
+Why Hammerspoon: native Apple-Silicon cask, and its Touch Bar module
+([`hs._asm.undocumented.touchbar`](https://github.com/asmagill/hs._asm.undocumented.touchbar))
+ships universal (x86_64+arm64) — no Rosetta, unlike MTMR. The module is experimental and uses
+undocumented APIs.
+
+The installer adds Hammerspoon (via Homebrew), drops the module under `~/.hammerspoon/`,
+installs the Lua config and cache writer, and wires `settings.json`, backing up an existing
+`~/.hammerspoon/init.lua` first.
+</details>
+
+## Codex presets
+
+Codex's footer is a fixed list of [built-in fields](https://developers.openai.com/codex/config-reference/#tui),
+so these presets keep each variant's information priority, not its bars or glyphs.
+One installer, pick a preset:
+
+```sh
+curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-codex-statusline.sh | sh
+```
+
+```sh
+curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-codex-statusline.sh | sh -s -- roguedbear
+```
+
+| Preset | Adds |
+|---|---|
+| *(default)* | Model + reasoning, context, usage limits, session tokens |
+| `roguedbear` | + working directory, Git branch, input tokens, run state |
+| `pie` | Shorter model label, compact usage/token set |
+| `touchbar` | Minimal model/context/token fallback |
+
+<details>
+<summary>Details</summary>
+
+Append the preset name after `sh -s --` (as in the `roguedbear` example above). The original
+RogueDBear URL (`variants/install-roguedbear-codex-statusline.sh`) remains supported.
+
+The installer merges the preset into `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`),
+preserves other `[tui]` settings, and keeps a backup at `config.toml.bak`. Requires Codex CLI
+0.129.0+. Restart Codex after install, or use `/statusline` to inspect the fields.
+
+Codex's native footer can't display custom bars, CPU/RAM, battery, weather, music, cost,
+duration, or vibes text — those need a terminal/tmux integration or a custom Codex build.
+Codex also can't invoke a cache writer per render, so there is no native Codex Touch Bar port.
+</details>
+
+## How it works
+
+Each variant is a standalone script. Claude installers drop it under `~/.claude/` and point
+`statusLine.command` in `~/.claude/settings.json` at it — switch variants any time by rerunning
+an installer or editing that key.
+
+Tests:
+
+```sh
+sh tests/test-install-codex-statusline.sh
+sh tests/test-touchbar-installer-assets.sh
 ```
