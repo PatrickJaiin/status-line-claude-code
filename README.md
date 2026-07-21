@@ -16,16 +16,22 @@ CPU/RAM, battery, now playing, and weather (located by IP).
 
 ## Classic
 
+**Preview:**
+
 ```
 Claude Opus 4.7  effort:high  CTX [██▒▒▒▒▒▒▒▒] 23%  5h [████▒▒▒▒▒▒] 42% resets 2h17m
 7d [██▒▒▒▒▒▒▒▒] 18% resets 4d  $1.42  +127/-43  dur 23m  cpu 18%  ram 64%  bat 87%+
 ```
+
+**Installation (paste in terminal):**
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/install.sh | sh
 ```
 
 ## RogueDBear
+
+**Preview:**
 
 ```
 ┌─ shiv  ~/repo  Claude Opus 4.7  (high)
@@ -36,6 +42,8 @@ curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/inst
 ├─ status: winning ✨  ·  vibes: cruising  ·  ♪ Tame Impala — The Less I Know [●●●○○○○○] 2:14/3:38
 └─$
 ```
+
+**Installation (paste in terminal):**
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-roguedbear-statusline.sh | sh
@@ -52,9 +60,13 @@ a live progress bar (YTMDesktop Companion Server + Spotify — see
 
 ## Pie
 
+**Preview:**
+
 ```
 Claude Opus 4.7  ◔ ctx 23%  ◑ 5h 42% (2h17m)  ◔ 7d 18% (4d)  $1.42  ◑ ram 64%  …
 ```
+
+**Installation (paste in terminal):**
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-pie-statusline.sh | sh
@@ -73,9 +85,13 @@ parentheses.
 Renders on the **MacBook Pro Touch Bar** via [Hammerspoon](https://www.hammerspoon.org); the
 terminal keeps a minimal one-liner.
 
+**Preview:**
+
 ```
 🧠 context 23%  ⏳ 5h 42% · 2h17m  💰 $1.42  🖥 cpu 18%  🔋 87%+  ☀️ +18°C  …
 ```
+
+**Installation (paste in terminal):**
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-touchbar-hammerspoon.sh | sh
@@ -117,9 +133,13 @@ Codex's footer is a fixed list of [built-in fields](https://developers.openai.co
 so these presets keep each variant's information priority, not its bars or glyphs.
 One installer, pick a preset:
 
+**Installation (paste in terminal):**
+
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-codex-statusline.sh | sh
 ```
+
+**Installation with a preset (paste in terminal):**
 
 ```sh
 curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/variants/install-codex-statusline.sh | sh -s -- roguedbear
