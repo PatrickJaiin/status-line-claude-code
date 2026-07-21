@@ -1,11 +1,11 @@
 #!/bin/sh
 # Claude Code status line — Touch Bar variant.
 #
-# Unlike the other variants, this one's real display lives on the Touch Bar (via MTMR),
+# Unlike the other variants, this one's real display lives on the Touch Bar (via Hammerspoon),
 # not in the terminal. Claude Code only pipes session JSON to its status-line command on
 # stdin, and only on render — a timer-driven Touch Bar widget can't see that stream. So this
 # script acts as the bridge: it parses the stdin payload and writes a compact JSON cache that
-# the MTMR reader (~/.claude/touchbar/read.sh) polls. The terminal gets only a minimal one-liner.
+# the Hammerspoon module reads. The terminal gets only a minimal one-liner.
 input=$(cat)
 
 CACHE_DIR="$HOME/.claude/touchbar"
@@ -18,6 +18,9 @@ five_pct=$(echo "$input"   | jq -r '.rate_limits.five_hour.used_percentage // em
 five_resets=$(echo "$input"| jq -r '.rate_limits.five_hour.resets_at // empty')
 week_pct=$(echo "$input"   | jq -r '.rate_limits.seven_day.used_percentage // empty')
 week_resets=$(echo "$input"| jq -r '.rate_limits.seven_day.resets_at // empty')
+# Fable-tier weekly limit — Claude Code doesn't send this field yet; the pill stays hidden until it does.
+fable_pct=$(echo "$input"  | jq -r '.rate_limits.seven_day_fable.used_percentage // .rate_limits.fable.used_percentage // empty')
+fable_resets=$(echo "$input" | jq -r '.rate_limits.seven_day_fable.resets_at // .rate_limits.fable.resets_at // empty')
 model=$(echo "$input"      | jq -r '.model.display_name // empty')
 effort=$(echo "$input"     | jq -r '.effort.level // empty')
 total_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
@@ -72,6 +75,8 @@ five_reset_str=""; five_reset_epoch=""
 [ -n "$five_resets" ] && { five_reset_str=$(time_until "$five_resets"); five_reset_epoch=$(iso_to_epoch "$five_resets"); }
 week_reset_str=""; week_reset_epoch=""
 [ -n "$week_resets" ] && { week_reset_str=$(time_until "$week_resets"); week_reset_epoch=$(iso_to_epoch "$week_resets"); }
+fable_reset_str=""; fable_reset_epoch=""
+[ -n "$fable_resets" ] && { fable_reset_str=$(time_until "$fable_resets"); fable_reset_epoch=$(iso_to_epoch "$fable_resets"); }
 
 cost_str=""
 [ -n "$total_cost" ] && cost_str=$(awk -v c="$total_cost" 'BEGIN { printf "$%.2f", c }')
@@ -96,6 +101,7 @@ round() { [ -n "$1" ] && printf '%.0f' "$1" || printf ''; }
 ctx_i=$(round "$ctx_used")
 five_i=$(round "$five_pct")
 week_i=$(round "$week_pct")
+fable_i=$(round "$fable_pct")
 
 # --- System metrics -------------------------------------------------------------------------
 # Battery via pmset (macOS).
@@ -222,6 +228,9 @@ jq -n \
   --argjson seven "$(num "$week_i")" \
   --arg seven_reset "$week_reset_str" \
   --argjson seven_reset_epoch "$(num "$week_reset_epoch")" \
+  --argjson fable "$(num "$fable_i")" \
+  --arg fable_reset "$fable_reset_str" \
+  --argjson fable_reset_epoch "$(num "$fable_reset_epoch")" \
   --arg cost     "$cost_str" \
   --arg lines    "$lines_str" \
   --arg dur      "$dur_str" \
@@ -234,6 +243,7 @@ jq -n \
   '{ts:$ts, model:$model, effort:$effort, ctx:$ctx,
     five:$five, five_reset:$five_reset, five_reset_epoch:$five_reset_epoch,
     seven:$seven, seven_reset:$seven_reset, seven_reset_epoch:$seven_reset_epoch,
+    fable:$fable, fable_reset:$fable_reset, fable_reset_epoch:$fable_reset_epoch,
     cost:$cost, lines:$lines, dur:$dur,
     cpu:$cpu, ram:$ram, bat:$bat, bat_chg:$bat_chg, np:$np, weather:$weather}' \
   > "$CACHE.tmp" 2>/dev/null && mv "$CACHE.tmp" "$CACHE" 2>/dev/null

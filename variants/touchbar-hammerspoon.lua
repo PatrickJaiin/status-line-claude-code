@@ -80,7 +80,11 @@ local function measure(stext)
 end
 local function readStatus()
   local okR, t = pcall(hs.json.read, CACHE)
-  if okR and type(t) == "table" then return t end
+  if okR and type(t) == "table" then
+    local captured = tonumber(t.ts)
+    t.stale = not captured or (os.time() - captured) > STALE
+    return t
+  end
   return nil
 end
 
@@ -138,27 +142,37 @@ end
 -- battery/clock are always live, so the bar stays bright and alive even when Claude is idle.
 local function segments()
   local s = readStatus()
+  local active = s and not s.stale
   local L = {}
   local function add(t, c) L[#L + 1] = { text = t, color = c } end
 
   local model = (s and s.model) or "Claude"
-  M.ultra = (s and s.effort == ULTRA_EFFORT) or false
+  M.ultra = (active and s.effort == ULTRA_EFFORT) or false
   if M.ultra then
     M.ultraModel = model
     L[#L + 1] = { text = "⚡ ULTRACODE " .. model, color = COL.accent, ultra = true, stext = ultraStext() }
+  elseif s and s.stale then
+    add("⌁ " .. model .. " · idle", COL.dim)
   else
     if s and s.effort and s.effort ~= "" then model = model .. " · " .. s.effort end
     add("⌁ " .. model, COL.accent)
   end
 
   local pressure
-  if s then pressure = math.max(s.ctx or 0, s.five or 0, s.seven or 0) end
-  local vword, vcolor = vibe(pressure)
-  add(vword, vcolor)
+  if active then pressure = math.max(s.ctx or 0, s.five or 0, s.seven or 0) end
+  if s and s.stale then
+    add("💤 waiting for Claude", COL.dim)
+  else
+    local vword, vcolor = vibe(pressure)
+    add(vword, vcolor)
+  end
 
-  if s and s.np and s.np ~= "" then add("♪ " .. truncate(s.np, 34), COL.accent) end
+  if active and s.np and s.np ~= "" then add("♪ " .. truncate(s.np, 34), COL.accent) end
 
-  if s and s.ctx then add("🧠 context " .. s.ctx .. "%", colorFor(s.ctx)) end
+  if active and s.ctx then add("🧠 context " .. s.ctx .. "%", colorFor(s.ctx)) end
+  -- Rate-limit pills and cost stay up while Claude is idle: usage only changes
+  -- when Claude renders, and the countdowns tick live from the reset epochs —
+  -- which exist precisely so the timer stays accurate between renders.
   if s and s.five then
     local t = "⏳ 5h " .. s.five .. "%"
     local r = fmtUntil(s.five_reset_epoch) or (s.five_reset ~= "" and s.five_reset or nil)
@@ -171,14 +185,23 @@ local function segments()
     if r then t = t .. " · " .. r end
     add(t, colorFor(s.seven))
   end
+  -- Fable-tier weekly limit; the cache writer sends fable=null until Claude Code ships the field.
+  if s and s.fable then
+    local t = "📖 fable " .. s.fable .. "%"
+    local r = fmtUntil(s.fable_reset_epoch) or (s.fable_reset ~= "" and s.fable_reset or nil)
+    if r then t = t .. " · " .. r end
+    add(t, colorFor(s.fable))
+  end
   if s and s.cost and s.cost ~= "" then add("💰 " .. s.cost, COL.white) end
-  if s and s.dur and s.dur ~= "" then add("⏱ " .. s.dur, COL.white) end
+  if active and s.dur and s.dur ~= "" then add("⏱ " .. s.dur, COL.white) end
 
   -- Always-live pills (a heartbeat independent of Claude).
   local cpu = liveCPU(); if cpu then add("🖥 cpu " .. cpu .. "%", colorFor(cpu)) end
   local ram = liveRAM(); if ram then add("🧮 ram " .. ram .. "%", colorFor(ram)) end
   local bat, chg = liveBat()
   if bat then add("🔋 battery " .. bat .. "%" .. chg, (bat < 20 and chg ~= "+") and COL.red or COL.green) end
+  -- Weather belongs to this always-live block: it has its own 600s TTL in the
+  -- cache writer, so a 90s-stale Claude cache does not make it stale.
   if s and s.weather and s.weather ~= "" then add(s.weather, COL.white) end
   add("🕐 " .. os.date("%H:%M"), COL.white)
   return L

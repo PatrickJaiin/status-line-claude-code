@@ -31,6 +31,9 @@ h5=$(jq -r '.rate_limits.five_hour.used_percentage // 0'                <<<"$inp
 h5_reset=$(jq -r '.rate_limits.five_hour.resets_at // empty'            <<<"$input")
 d7=$(jq -r '.rate_limits.seven_day.used_percentage // 0'                <<<"$input" | cut -d. -f1)
 d7_reset=$(jq -r '.rate_limits.seven_day.resets_at // empty'            <<<"$input")
+# Fable-tier weekly limit — Claude Code doesn't send this field yet; row hidden until it does.
+fbl=$(jq -r '.rate_limits.seven_day_fable.used_percentage // .rate_limits.fable.used_percentage // empty' <<<"$input" | cut -d. -f1)
+fbl_reset=$(jq -r '.rate_limits.seven_day_fable.resets_at // .rate_limits.fable.resets_at // empty' <<<"$input")
 cost=$(jq -r '.cost.total_cost_usd // empty'                            <<<"$input")
 total_input_tokens=$(jq -r '.context_window.total_input_tokens // empty' <<<"$input")
 lines_added=$(jq -r '.cost.total_lines_added // 0'                      <<<"$input")
@@ -431,13 +434,15 @@ header="${DIM}${user}${RESET} ${BLUE}${cwd}${RESET} ${model}"
 [[ -n "$effort" ]] && header="${header} ${MAGENTA}(${effort})${RESET}"
 printf '%s┌─%s %b\n' "$ORANGE" "$RESET" "$header"
 
-h5_reset_str=""; d7_reset_str=""
+h5_reset_str=""; d7_reset_str=""; fbl_reset_str=""
 [[ -n "$h5_reset" ]] && h5_reset_str=$(time_until "$h5_reset")
 [[ -n "$d7_reset" ]] && d7_reset_str=$(time_until "$d7_reset")
+[[ -n "$fbl_reset" ]] && fbl_reset_str=$(time_until "$fbl_reset")
 
 render_bar_row "ctx" "$ctx" ""               "$seg_cpu" "$seg_ram"
 render_bar_row "5h " "$h5"  "$h5_reset_str"  "$seg_bat" "$seg_weather"
 render_bar_row "7d " "$d7"  "$d7_reset_str"  ""         ""
+[[ -n "$fbl" ]] && render_bar_row "fbl" "$fbl" "$fbl_reset_str" "" ""
 
 if (( NARROW )); then
   emit_narrow_rows "$seg_cpu" "$seg_ram" "$seg_bat" "$seg_weather"

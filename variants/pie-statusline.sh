@@ -10,6 +10,9 @@ five_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empt
 five_resets=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
 week_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 week_resets=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
+# Fable-tier weekly limit — Claude Code doesn't send this field yet; segment hidden until it does.
+fable_pct=$(echo "$input" | jq -r '.rate_limits.seven_day_fable.used_percentage // .rate_limits.fable.used_percentage // empty')
+fable_resets=$(echo "$input" | jq -r '.rate_limits.seven_day_fable.resets_at // .rate_limits.fable.resets_at // empty')
 model=$(echo "$input" | jq -r '.model.display_name // empty')
 effort=$(echo "$input" | jq -r '.effort.level // empty')
 total_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
@@ -273,6 +276,13 @@ if [ -n "$week_pct" ]; then
   c=$(color_for_pct "$week_pct"); g=$(pie_glyph "$week_pct")
   r=""; [ -n "$week_resets" ] && r=" ${DIM}($(time_until "$week_resets"))${RESET}"
   add_seg "$(printf "${c}%s 7d %.0f%%${RESET}%b" "$g" "$week_pct" "$r")"
+fi
+
+# Fable-tier limit (hidden until Claude Code sends the field)
+if [ -n "$fable_pct" ]; then
+  c=$(color_for_pct "$fable_pct"); g=$(pie_glyph "$fable_pct")
+  r=""; [ -n "$fable_resets" ] && r=" ${DIM}($(time_until "$fable_resets"))${RESET}"
+  add_seg "$(printf "${c}%s fable %.0f%%${RESET}%b" "$g" "$fable_pct" "$r")"
 fi
 
 [ -n "$cost_str" ]      && add_seg "$(printf "${MAGENTA}%s${RESET}" "$cost_str")"
