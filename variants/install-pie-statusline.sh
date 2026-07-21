@@ -53,5 +53,24 @@ json.dump(d, open(path, "w"), indent=2)
 PY
 fi
 
+# Install a /toggle slash command so the status line can be flipped from inside
+# Claude Code. Skipped if an unrelated /toggle command already exists.
+CMD_FILE="$HOME/.claude/commands/toggle.md"
+mkdir -p "$HOME/.claude/commands"
+if [ -f "$CMD_FILE" ] && ! grep -q statusline "$CMD_FILE" 2>/dev/null; then
+  echo "Note: $CMD_FILE already exists; skipping the /toggle command install."
+else
+  cat > "$CMD_FILE" <<EOF
+---
+description: Toggle the Claude Code status line on or off
+allowed-tools: Bash(sh $DEST:*)
+---
+
+!\`sh $DEST toggle\`
+
+The command above already flipped the status line. Tell the user its new state in one short sentence.
+EOF
+fi
+
 echo "pie-statusline installed at $DEST."
 echo "Restart Claude Code to see it."

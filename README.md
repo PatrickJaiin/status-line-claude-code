@@ -141,9 +141,14 @@ that takes priority automatically.
 
 ## Toggle on / off
 
-Every Claude Code variant shares one switch: while `~/.claude/statusline-off`
-exists, the script renders nothing and the status line disappears. Flip it by
-running your installed variant with `toggle` (or force a state with `on` / `off`):
+Type **`/toggle`** inside Claude Code — the installers drop a slash command
+(`~/.claude/commands/toggle.md`) that flips the status line on the spot (if you
+already had your own `/toggle` command, it is left untouched).
+
+Under the hood every variant shares one switch: while `~/.claude/statusline-off`
+exists, the script renders nothing and the status line disappears. You can also
+flip it from a terminal by running your installed variant with `toggle` (or
+force a state with `on` / `off`):
 
 ```sh
 sh   ~/.claude/statusline-command.sh    toggle   # Classic
