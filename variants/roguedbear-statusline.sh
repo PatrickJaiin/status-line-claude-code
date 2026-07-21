@@ -200,6 +200,22 @@ refresh_weather() {
   curl -fsS --max-time 3 "${path}?format=%c+%t" 2>/dev/null | tr -d '\n'
 }
 
+# Fable weekly limit. Claude Code's payload doesn't carry it yet, but its /usage
+# screen reads the OAuth usage API, where Fable shows up as a weekly_scoped limit.
+# Same source here: token from the Claude Code keychain entry (or the Linux
+# credentials file), output "percent|resets_at" or empty when no Fable limit.
+refresh_fable_usage() {
+  local tok
+  tok=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
+    | jq -r '.claudeAiOauth.accessToken // empty')
+  [[ -n "$tok" ]] || tok=$(jq -r '.claudeAiOauth.accessToken // empty' "$HOME/.claude/.credentials.json" 2>/dev/null)
+  [[ -z "$tok" ]] && return 0
+  curl -fsS --max-time 3 \
+    -H "Authorization: Bearer $tok" -H "anthropic-beta: oauth-2025-04-20" \
+    https://api.anthropic.com/api/oauth/usage 2>/dev/null \
+    | jq -r 'first(.limits[]? | select(.kind=="weekly_scoped" and ((.scope.model.display_name // "") | ascii_downcase | contains("fable")))) // {} | if .percent == null then empty else "\(.percent)|\(.resets_at // "")" end'
+}
+
 refresh_sysstat() {
   # Output: "cpu_pct|ram_pct"
   #
@@ -309,6 +325,13 @@ fi
 
 cache_swr coords 3600 refresh_coords >/dev/null
 weather=$(cache_swr weather 600 refresh_weather)
+if [[ -z "$fbl" ]]; then
+  fable_api=$(cache_swr fable-usage 120 refresh_fable_usage)
+  if [[ -n "$fable_api" ]]; then
+    fbl=${fable_api%%|*}; fbl=${fbl%%.*}
+    fbl_reset=${fable_api#*|}
+  fi
+fi
 sysstat=$(cache_swr sysstat 5 refresh_sysstat)
 np=$(cache_swr nowplaying 6 refresh_nowplaying)
 

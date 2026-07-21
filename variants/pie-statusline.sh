@@ -33,7 +33,8 @@ five_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empt
 five_resets=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
 week_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 week_resets=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
-# Fable-tier weekly limit — Claude Code doesn't send this field yet; segment hidden until it does.
+# Fable-tier weekly limit — payload first (Claude Code doesn't send it yet); below,
+# after the parse block, we fall back to the OAuth usage API that /usage reads.
 fable_pct=$(echo "$input" | jq -r '.rate_limits.seven_day_fable.used_percentage // .rate_limits.fable.used_percentage // empty')
 fable_resets=$(echo "$input" | jq -r '.rate_limits.seven_day_fable.resets_at // .rate_limits.fable.resets_at // empty')
 model=$(echo "$input" | jq -r '.model.display_name // empty')
@@ -42,6 +43,37 @@ total_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
 lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // empty')
 lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // empty')
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty')
+
+# No fable field in the payload — fall back to the OAuth usage API (the same
+# source the /usage screen reads), where Fable appears as a weekly_scoped limit.
+# Token comes from the Claude Code keychain entry (macOS) or credentials file
+# (Linux). Cached 120s and refreshed in the background so renders stay fast.
+if [ -z "$fable_pct" ]; then
+  fable_cache="$HOME/.claude/.fable-usage-cache"
+  fable_age=999999
+  if [ -f "$fable_cache" ]; then
+    fable_mtime=$(stat -c %Y "$fable_cache" 2>/dev/null || stat -f %m "$fable_cache" 2>/dev/null || echo 0)
+    fable_age=$(( $(date +%s) - fable_mtime ))
+  fi
+  if [ "$fable_age" -ge 120 ]; then
+    (
+      tok=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
+        | jq -r '.claudeAiOauth.accessToken // empty')
+      [ -n "$tok" ] || tok=$(jq -r '.claudeAiOauth.accessToken // empty' "$HOME/.claude/.credentials.json" 2>/dev/null)
+      out=""
+      [ -n "$tok" ] && out=$(curl -fsS --max-time 3 \
+        -H "Authorization: Bearer $tok" -H "anthropic-beta: oauth-2025-04-20" \
+        https://api.anthropic.com/api/oauth/usage 2>/dev/null \
+        | jq -r 'first(.limits[]? | select(.kind=="weekly_scoped" and ((.scope.model.display_name // "") | ascii_downcase | contains("fable")))) // {} | if .percent == null then empty else "\(.percent)|\(.resets_at // "")" end')
+      printf '%s' "$out" > "$fable_cache.tmp.$$" && mv "$fable_cache.tmp.$$" "$fable_cache"
+    ) >/dev/null 2>&1 &
+  fi
+  fable_api=$(cat "$fable_cache" 2>/dev/null)
+  if [ -n "$fable_api" ]; then
+    fable_pct=${fable_api%%|*}
+    fable_resets=${fable_api#*|}
+  fi
+fi
 term_cols=$(echo "$input" | jq -r '.terminal.width // empty' 2>/dev/null)
 
 RESET='\033[0m'

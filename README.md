@@ -20,7 +20,8 @@ CPU/RAM, battery, now playing, and weather (located by IP).
 
 ```
 Claude Opus 4.7  effort:high  CTX [██▒▒▒▒▒▒▒▒] 23%  5h [████▒▒▒▒▒▒] 42% resets 2h17m
-7d [██▒▒▒▒▒▒▒▒] 18% resets 4d  $1.42  +127/-43  dur 23m  cpu 18%  ram 64%  bat 87%+
+7d [██▒▒▒▒▒▒▒▒] 18% resets 4d  fable [████████▒▒] 85% resets 4d  $1.42  +127/-43
+dur 23m  cpu 18%  ram 64%  bat 87%+
 ```
 
 **Installation (paste in terminal):**
@@ -38,6 +39,7 @@ curl -fsSL https://github.com/PatrickJaiin/status-line-claude-code/raw/main/inst
 ├─ ctx [●●○○○○○○○○]  23%                         cpu 18%      ram 64%
 ├─ 5h  [●●●●○○○○○○]  42%  resets 2h17m           bat 87%+     ☀️ +18°C
 ├─ 7d  [●●○○○○○○○○]  18%  resets 4d
+├─ fbl [●●●●●●●●○○]  85%  resets 4d
 ├─ dur 23m  ·  $1.42  ·  12.3k tok
 ├─ status: winning ✨  ·  vibes: cruising  ·  ♪ Tame Impala — The Less I Know [●●●○○○○○] 2:14/3:38
 └─$
@@ -63,7 +65,7 @@ a live progress bar (YTMDesktop Companion Server + Spotify — see
 **Preview:**
 
 ```
-Claude Opus 4.7  ◔ ctx 23%  ◑ 5h 42% (2h17m)  ◔ 7d 18% (4d)  $1.42  ◑ ram 64%  …
+Claude Opus 4.7  ◔ ctx 23%  ◑ 5h 42% (2h17m)  ◔ 7d 18% (4d)  ◕ fable 85% (4d)  $1.42  …
 ```
 
 **Installation (paste in terminal):**
@@ -88,7 +90,7 @@ terminal keeps a minimal one-liner.
 **Preview:**
 
 ```
-🧠 context 23%  ⏳ 5h 42% · 2h17m  💰 $1.42  🖥 cpu 18%  🔋 87%+  ☀️ +18°C  …
+🧠 context 23%  ⏳ 5h 42% · 2h17m  📖 fable 85% · 4d  💰 $1.42  🖥 cpu 18%  🔋 87%+  …
 ```
 
 **Installation (paste in terminal):**
@@ -126,6 +128,16 @@ The installer adds Hammerspoon (via Homebrew), drops the module under `~/.hammer
 installs the Lua config and cache writer, and wires `settings.json`, backing up an existing
 `~/.hammerspoon/init.lua` first.
 </details>
+
+## Fable usage bar
+
+Claude Code's status-line payload only carries the 5h/7d limits, so the Fable
+weekly bar reads the same OAuth usage API the `/usage` screen does (token from
+the Claude Code keychain entry on macOS, `~/.claude/.credentials.json` on
+Linux), cached for 120s and refreshed in the background. Accounts with no
+Fable-scoped limit simply don't get the bar. If Claude Code ever ships fable
+data in the payload (`rate_limits.seven_day_fable` / `rate_limits.fable`),
+that takes priority automatically.
 
 ## Toggle on / off
 
