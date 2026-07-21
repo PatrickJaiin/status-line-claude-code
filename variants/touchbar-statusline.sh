@@ -6,11 +6,40 @@
 # stdin, and only on render — a timer-driven Touch Bar widget can't see that stream. So this
 # script acts as the bridge: it parses the stdin payload and writes a compact JSON cache that
 # the Hammerspoon module reads. The terminal gets only a minimal one-liner.
-input=$(cat)
 
 CACHE_DIR="$HOME/.claude/touchbar"
 CACHE="$CACHE_DIR/status.json"
 mkdir -p "$CACHE_DIR"
+
+# On/off switch shared by all variants: while ~/.claude/statusline-off exists,
+# render nothing in the terminal and clear the Touch Bar (the cache gets
+# {"off":true}, which the Hammerspoon module renders as a single dim pill).
+# Flip it by running this script with:  toggle | on | off
+TOGGLE_FLAG="$HOME/.claude/statusline-off"
+case "${1:-}" in
+  toggle|on|off)
+    case "$1" in
+      on)  rm -f "$TOGGLE_FLAG" ;;
+      off) : > "$TOGGLE_FLAG" ;;
+      *)   if [ -e "$TOGGLE_FLAG" ]; then rm -f "$TOGGLE_FLAG"; else : > "$TOGGLE_FLAG"; fi ;;
+    esac
+    if [ -e "$TOGGLE_FLAG" ]; then
+      printf '{"off":true}\n' > "$CACHE"   # clear the Touch Bar right away, not on next render
+      echo "Status line: OFF (Touch Bar cleared; run '$0 toggle' to re-enable)"
+    else
+      rm -f "$CACHE"                       # back to the idle state until the next render
+      echo "Status line: ON (Touch Bar repopulates on the next render)"
+    fi
+    exit 0
+    ;;
+esac
+if [ -e "$TOGGLE_FLAG" ]; then
+  cat > /dev/null 2>&1 || true   # drain stdin so Claude Code never sees a broken pipe
+  printf '{"off":true}\n' > "$CACHE"
+  exit 0
+fi
+
+input=$(cat)
 
 # --- Claude metrics (straight off the stdin JSON) -------------------------------------------
 ctx_used=$(echo "$input"   | jq -r '.context_window.used_percentage // empty')

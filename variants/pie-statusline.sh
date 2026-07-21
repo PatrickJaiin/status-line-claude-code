@@ -3,6 +3,29 @@
 # One glyph per metric: ○ ◔ ◑ ◕ ● (0/25/50/75/100%).
 # Stays on one line when it fits; wraps greedily otherwise.
 
+# On/off switch shared by all variants: while ~/.claude/statusline-off exists,
+# render nothing. Flip it by running this script with:  toggle | on | off
+TOGGLE_FLAG="$HOME/.claude/statusline-off"
+case "${1:-}" in
+  toggle|on|off)
+    case "$1" in
+      on)  rm -f "$TOGGLE_FLAG" ;;
+      off) : > "$TOGGLE_FLAG" ;;
+      *)   if [ -e "$TOGGLE_FLAG" ]; then rm -f "$TOGGLE_FLAG"; else : > "$TOGGLE_FLAG"; fi ;;
+    esac
+    if [ -e "$TOGGLE_FLAG" ]; then
+      echo "Status line: OFF (disappears on the next render; run '$0 toggle' to re-enable)"
+    else
+      echo "Status line: ON (reappears on the next render)"
+    fi
+    exit 0
+    ;;
+esac
+if [ -e "$TOGGLE_FLAG" ]; then
+  cat > /dev/null 2>&1 || true   # drain stdin so Claude Code never sees a broken pipe
+  exit 0
+fi
+
 input=$(cat)
 
 ctx_used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')

@@ -127,6 +127,24 @@ installs the Lua config and cache writer, and wires `settings.json`, backing up 
 `~/.hammerspoon/init.lua` first.
 </details>
 
+## Toggle on / off
+
+Every Claude Code variant shares one switch: while `~/.claude/statusline-off`
+exists, the script renders nothing and the status line disappears. Flip it by
+running your installed variant with `toggle` (or force a state with `on` / `off`):
+
+```sh
+sh   ~/.claude/statusline-command.sh    toggle   # Classic
+bash ~/.claude/roguedbear-statusline.sh toggle   # RogueDBear
+sh   ~/.claude/pie-statusline.sh        toggle   # Pie
+sh   ~/.claude/touchbar-statusline.sh   toggle   # Touch Bar (also clears the pills)
+```
+
+The change shows on the next status-line render. Terminal status lines are plain
+text, so there's no clickable button — but the Touch Bar variant has real tap
+controls: `⌁` in the Control Strip opens the bar, `✕` hides it, and the toggle
+above additionally blanks the pills until you switch back on.
+
 ## Codex presets
 
 Codex's footer is a fixed list of [built-in fields](https://developers.openai.com/codex/config-reference/#tui),

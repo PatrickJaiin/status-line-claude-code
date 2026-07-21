@@ -146,6 +146,13 @@ local function segments()
   local L = {}
   local function add(t, c) L[#L + 1] = { text = t, color = c } end
 
+  -- The shell script's toggle ("touchbar-statusline.sh toggle") writes {"off":true}
+  -- to the cache; show a single dim pill so the bar reads as switched off, not broken.
+  if s and s.off then
+    add("⌁ status line off", COL.dim)
+    return L
+  end
+
   local model = (s and s.model) or "Claude"
   M.ultra = (active and s.effort == ULTRA_EFFORT) or false
   if M.ultra then
