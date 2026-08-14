@@ -46,6 +46,112 @@ fi
 
 input=$(cat)
 
+CACHE_DIR="$HOME/.cache/claude-statusline"
+mkdir -p "$CACHE_DIR" 2>/dev/null
+
+# Reap stale per-session render caches left behind by closed sessions.
+# Cheap hygiene, not worth paying for on every tick — ~1 in 200 renders.
+if (( RANDOM % 200 == 0 )); then
+  ( find "$CACHE_DIR" -name 'render-*' -mtime +1 -delete 2>/dev/null & disown ) 2>/dev/null
+fi
+
+# ── Focus gate (early) ─────────────────────────────────────────────────
+# Every open session gets ticked on the same refreshInterval regardless of
+# focus, so an unfocused session doing a full render (~13 jq calls + lsappinfo
+# + sed/awk/date) every tick is pure waste — nobody's looking at it. Only the
+# focused session needs a live render (e.g. the now-playing bar); background
+# ones replay their last render for UNFOCUSED_THROTTLE seconds instead.
+# ponytail: per-session cache keyed on $PPID (the parent claude process),
+# bump UNFOCUSED_THROTTLE if a background pane looks stale when you tab back.
+UNFOCUSED_THROTTLE=15
+render_cache="$CACHE_DIR/render-$PPID"
+
+# The frontmost window is stamped cc:<session_id> by a SessionStart hook
+# (paired with CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 so Claude Code doesn't
+# overwrite it) — an exact per-session identity check, not a guess from a
+# fuzzy session_name substring. The title itself is global desktop state,
+# identical for every session on a given tick, so it's fetched once
+# system-wide (3s TTL) instead of every session paying its own osascript call
+# — System Events serializes Apple Events, so N sessions asking at once
+# queues rather than parallelizes. `timeout` guards a wedged System Events.
+get_front_title() {
+  local f="$CACHE_DIR/front-title" mtime age t
+  if [[ -f "$f" ]]; then
+    mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)
+    age=$(( $(date +%s) - mtime ))
+    if (( age < 3 )); then
+      cat "$f" 2>/dev/null
+      return
+    fi
+  fi
+  t=$(timeout 1 osascript -e 'tell application "System Events" to get name of front window of (first application process whose frontmost is true)' 2>/dev/null)
+  printf '%s' "$t" > "$f" 2>/dev/null
+  printf '%s' "$t"
+}
+
+is_focused() {
+  local front
+  front=$(lsappinfo info -only bundleID "$(lsappinfo front 2>/dev/null)" 2>/dev/null \
+    | sed -n 's/^"CFBundleIdentifier"="\(.*\)"$/\1/p')
+  case "$front" in
+    com.mitchellh.ghostty \
+    | com.googlecode.iterm2 \
+    | com.apple.Terminal \
+    | net.kovidgoyal.kitty \
+    | io.alacritty \
+    | com.github.wez.wezterm \
+    | co.zeit.hyper \
+    | com.microsoft.VSCode \
+    | com.todesktop.230313mzl4w4u92 \
+    | dev.warp.Warp-Stable \
+    | org.tabby)
+      ;;
+    *) return 1 ;;
+  esac
+
+  local session_name front_title
+  session_name=$(printf '%s' "$input" | sed -n 's/.*"session_name":"\([^"]*\)".*/\1/p')
+  # No session_name to key off — can't tell windows apart, so don't wrongly
+  # freeze a pane that might actually be the one on screen.
+  [[ -z "$session_name" ]] && return 0
+
+  front_title=$(get_front_title)
+  # Empty result (Accessibility/Automation permission revoked, System Events
+  # wedged, timeout hit) must fail OPEN — the alternative is every session,
+  # including the one you're staring at, silently going stale for good.
+  [[ -z "$front_title" ]] && return 0
+
+  # Substring, not exact: Claude prepends a spinner/state glyph (⠂/✳/etc) to
+  # the title, so the title is never literally equal to session_name — this
+  # is also what keeps titles human-readable and live (Claude fully owns the
+  # title; we never touch it), so pilot-by-window-title still works exactly
+  # like before. A session_name that's a substring of another's is a known,
+  # benign edge case: worst case is one unneeded full render, not a stuck one.
+  [[ "$front_title" == *"$session_name"* ]]
+}
+
+if is_focused; then
+  focused=1
+else
+  focused=0
+  # -s (exists AND non-empty): a 0-byte or partial cache from an interrupted
+  # render must never be replayed as if it were a real answer.
+  if [[ -s "$render_cache" ]]; then
+    mtime=$(stat -c %Y "$render_cache" 2>/dev/null || stat -f %m "$render_cache" 2>/dev/null || echo 0)
+    age=$(( $(date +%s) - mtime ))
+    if (( age < UNFOCUSED_THROTTLE )); then
+      printf '%s' "$(<"$render_cache")"
+      exit 0
+    fi
+  fi
+fi
+
+# Buffer the whole render before writing the cache (instead of streaming
+# through `tee`) so a kill mid-render (new tick firing, session teardown,
+# a set -u trip) never leaves a truncated/partial file with a fresh mtime
+# for the throttle above to replay as gospel.
+out=$( {
+
 # ── Inputs ─────────────────────────────────────────────────────────────
 user=$(whoami)
 cwd=$(jq -r '.workspace.current_dir // ""'                              <<<"$input")
@@ -144,27 +250,45 @@ trunc() {
 }
 
 # ── Cache (stale-while-revalidate) ─────────────────────────────────────
-CACHE_DIR="$HOME/.cache/claude-statusline"
-mkdir -p "$CACHE_DIR" 2>/dev/null
-
 cache_swr() {
   local key=$1
   local ttl=$2
   local fn=$3
   local file="$CACHE_DIR/$key"
+  local lock="$file.lock"
   local age=0
+  local need_refresh=0
   if [[ -f "$file" ]]; then
     local mtime
     mtime=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || echo 0)
     age=$(( $(date +%s) - mtime ))
     cat "$file"
-    if (( age >= ttl )); then
-      ( "$fn" > "$file.tmp" 2>/dev/null && mv "$file.tmp" "$file" ) >/dev/null 2>&1 &
+    (( age >= ttl )) && need_refresh=1
+  else
+    need_refresh=1
+  fi
+  # Serialize refreshes across concurrent renders: mkdir is atomic on POSIX,
+  # so only one process per key wins the lock and spawns the background job.
+  # Unique temp suffix per PID prevents partial-write races. If a previous
+  # refresh got SIGKILL'd (Claude Code restart), the EXIT trap never ran
+  # and the lock dir leaks — reap any lock older than 30s (5x TTL) so the
+  # cache can't get permanently bricked.
+  if (( need_refresh )); then
+    if [[ -d "$lock" ]]; then
+      local lock_mtime
+      lock_mtime=$(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || echo 0)
+      if (( $(date +%s) - lock_mtime > 30 )); then
+        rm -rf "$lock" "$file".tmp.* 2>/dev/null
+      fi
+    fi
+    if mkdir "$lock" 2>/dev/null; then
+      (
+        local tmp="$file.tmp.$$"
+        trap 'rm -f "$tmp"; rmdir "$lock" 2>/dev/null' EXIT
+        "$fn" > "$tmp" 2>/dev/null && mv "$tmp" "$file"
+      ) >/dev/null 2>&1 &
       disown 2>/dev/null || true
     fi
-  else
-    ( "$fn" > "$file.tmp" 2>/dev/null && mv "$file.tmp" "$file" ) >/dev/null 2>&1 &
-    disown 2>/dev/null || true
   fi
 }
 
@@ -252,8 +376,13 @@ refresh_sysstat() {
 }
 
 refresh_nowplaying() {
-  # Output: "SRC|track|progress_s|duration_s|captured_epoch"
+  # Output: "SRC|track|progress_s|duration_s|captured_epoch" when playing,
+  #         literal "NONE" when nothing's playing (so the renderer suppresses).
+  # Return 1 (preserves previous cache) ONLY for transient failures like
+  # rate limits — never for "the user is paused" or "YTM is closed", which
+  # are real states the renderer needs to see.
   local token="" state="" track="" pos="" dur="" raw="" rest=""
+  local curl_exit=0
   local now_epoch
   now_epoch=$(date +%s)
 
@@ -262,20 +391,34 @@ refresh_nowplaying() {
     token=$(cat ~/.claude/.ytmd-token 2>/dev/null)
     if [[ -n "$token" ]]; then
       state=$(curl -fsS --max-time 1.5 http://localhost:9863/api/v1/state \
-        -H "Authorization: $token" 2>/dev/null || true)
-      if [[ -n "$state" ]]; then
-        IFS=$'\t' read -r track pos dur < <(jq -r '
-          select((.player.trackState // -1) == 1 or (.player.trackState // -1) == 2)
-          | [(.video.author // "?") + " — " + (.video.title // "?"),
-             (.player.videoProgress // 0 | floor),
-             (.video.durationSeconds // 0)]
-          | @tsv' <<<"$state" 2>/dev/null) || true
-        track=${track:-}
-        if [[ -n "$track" && "$track" != "? — ?" ]]; then
-          printf 'YTM|%s|%s|%s|%s' "$track" "${pos:-}" "${dur:-}" "$now_epoch"
-          return
-        fi
-      fi
+        -H "Authorization: $token" 2>/dev/null) || curl_exit=$?
+      case $curl_exit in
+        0)
+          # Got a response. Parse it; if select filters out (paused/idle),
+          # fall through to Spotify rather than treating as "preserve".
+          if [[ -n "$state" ]]; then
+            IFS=$'\t' read -r track pos dur < <(jq -r '
+              select((.player.trackState // -1) == 1 or (.player.trackState // -1) == 2)
+              | [(.video.author // "?") + " — " + (.video.title // "?"),
+                 (.player.videoProgress // 0 | floor),
+                 (.video.durationSeconds // 0)]
+              | @tsv' <<<"$state" 2>/dev/null) || true
+            track=${track:-}
+            if [[ -n "$track" && "$track" != "? — ?" ]]; then
+              printf 'YTM|%s|%s|%s|%s' "$track" "${pos:-}" "${dur:-}" "$now_epoch"
+              return 0
+            fi
+          fi
+          ;;
+        7|28)
+          # Connection refused / timeout — YTM is closed. Fall through to
+          # Spotify; if that's also nothing, we'll emit NONE below.
+          ;;
+        *)
+          # HTTP 4xx/5xx (auth error, rate limit, etc.) — transient, keep cache.
+          return 1
+          ;;
+      esac
     fi
   fi
 
@@ -305,7 +448,10 @@ OSA
     fi
   fi
 
-  return 1   # no music data — let cache_swr preserve previous value
+  # Nothing playing anywhere — write a sentinel so the next render suppresses
+  # music instead of showing a stale track from when YTM was last open.
+  printf 'NONE'
+  return 0
 }
 
 # ── Collect data ───────────────────────────────────────────────────────
@@ -323,17 +469,29 @@ if [[ -n "$duration_ms" ]]; then
   fi
 fi
 
-cache_swr coords 3600 refresh_coords >/dev/null
-weather=$(cache_swr weather 600 refresh_weather)
-if [[ -z "$fbl" ]]; then
-  fable_api=$(cache_swr fable-usage 120 refresh_fable_usage)
-  if [[ -n "$fable_api" ]]; then
-    fbl=${fable_api%%|*}; fbl=${fbl%%.*}
-    fbl_reset=${fable_api#*|}
-  fi
+# ── Focus gate (deferred fetch) ─────────────────────────────────────────
+# Skip expensive refreshes (curl to YTM/wttr.in/Anthropic, top, osascript)
+# when the frontmost app isn't a terminal hosting Claude Code — we'd just
+# be burning CPU updating data the user can't see. $focused was already
+# computed above, before the render buffer opened.
+fable_api=""
+if (( focused )); then
+  cache_swr coords 3600 refresh_coords >/dev/null
+  weather=$(cache_swr weather 600 refresh_weather)
+  [[ -z "$fbl" ]] && fable_api=$(cache_swr fable-usage 120 refresh_fable_usage)
+  sysstat=$(cache_swr sysstat 10 refresh_sysstat)
+  np=$(cache_swr nowplaying 6 refresh_nowplaying)
+else
+  # Frozen — read cached values, no background refresh spawned.
+  weather=$(cat "$CACHE_DIR/weather" 2>/dev/null || true)
+  [[ -z "$fbl" ]] && fable_api=$(cat "$CACHE_DIR/fable-usage" 2>/dev/null || true)
+  sysstat=$(cat "$CACHE_DIR/sysstat" 2>/dev/null || true)
+  np=$(cat "$CACHE_DIR/nowplaying" 2>/dev/null || true)
 fi
-sysstat=$(cache_swr sysstat 5 refresh_sysstat)
-np=$(cache_swr nowplaying 6 refresh_nowplaying)
+if [[ -n "$fable_api" ]]; then
+  fbl=${fable_api%%|*}; fbl=${fbl%%.*}
+  fbl_reset=${fable_api#*|}
+fi
 
 cpu_pct=$(awk -F'|' '{print $1}' <<<"$sysstat")
 ram_pct=$(awk -F'|' '{print $2}' <<<"$sysstat")
@@ -357,7 +515,7 @@ fi
 
 music=""
 format_secs() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
-if [[ -n "$np" ]]; then
+if [[ -n "$np" && "$np" != "NONE" ]]; then
   IFS='|' read -r mp_src mp_track mp_pos mp_dur mp_captured <<<"$np"
   icon=""
   case "$mp_src" in
@@ -513,3 +671,11 @@ else
 fi
 
 printf '%s└─$%s ' "$ORANGE" "$RESET"
+
+} )
+
+printf '%s' "$out"
+if [[ -n "$out" ]]; then
+  tmp="$render_cache.tmp.$$"
+  printf '%s' "$out" > "$tmp" 2>/dev/null && mv -f "$tmp" "$render_cache" 2>/dev/null
+fi
