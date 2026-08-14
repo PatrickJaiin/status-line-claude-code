@@ -66,14 +66,14 @@ fi
 UNFOCUSED_THROTTLE=15
 render_cache="$CACHE_DIR/render-$PPID"
 
-# The frontmost window is stamped cc:<session_id> by a SessionStart hook
-# (paired with CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 so Claude Code doesn't
-# overwrite it) — an exact per-session identity check, not a guess from a
-# fuzzy session_name substring. The title itself is global desktop state,
-# identical for every session on a given tick, so it's fetched once
-# system-wide (3s TTL) instead of every session paying its own osascript call
-# — System Events serializes Apple Events, so N sessions asking at once
-# queues rather than parallelizes. `timeout` guards a wedged System Events.
+# Claude Code owns the terminal title and stamps it with the session name,
+# so matching the frontmost window's title against $session_name (below)
+# tells windows apart without any extra hook. The title itself is global
+# desktop state, identical for every session on a given tick, so it's
+# fetched once system-wide (3s TTL) instead of every session paying its
+# own osascript call — System Events serializes Apple Events, so N sessions
+# asking at once queues rather than parallelizes. `timeout` guards a wedged
+# System Events.
 get_front_title() {
   local f="$CACHE_DIR/front-title" mtime age t
   if [[ -f "$f" ]]; then
@@ -93,6 +93,10 @@ is_focused() {
   local front
   front=$(lsappinfo info -only bundleID "$(lsappinfo front 2>/dev/null)" 2>/dev/null \
     | sed -n 's/^"CFBundleIdentifier"="\(.*\)"$/\1/p')
+  # lsappinfo gave us nothing (wedged, permission hiccup) — same "we don't
+  # know" case as get_front_title below, so fail OPEN for the same reason:
+  # don't freeze the pane that might actually be the one on screen.
+  [[ -z "$front" ]] && return 0
   case "$front" in
     com.mitchellh.ghostty \
     | com.googlecode.iterm2 \
@@ -192,10 +196,7 @@ bar() {
   [[ "$p" =~ ^[0-9]+$ ]] || p=0
   (( p > 100 )) && p=100
   local f=$(( p * w / 100 )) e=$(( w - p * w / 100 )) i color
-  if   (( p >= 80 )); then color="$RED"
-  elif (( p >= 50 )); then color="$YELLOW"
-  else                    color="$GREEN"
-  fi
+  color=$(color_for_pct "$p")
   printf '%s' "$color"
   for (( i=0; i<f; i++ )); do printf '●'; done
   printf '%s' "$DIM"
@@ -410,13 +411,14 @@ refresh_nowplaying() {
             fi
           fi
           ;;
-        7|28)
-          # Connection refused / timeout — YTM is closed. Fall through to
-          # Spotify; if that's also nothing, we'll emit NONE below.
-          ;;
         *)
-          # HTTP 4xx/5xx (auth error, rate limit, etc.) — transient, keep cache.
-          return 1
+          # Connection refused/timeout (YTM closed) or an HTTP error (stale
+          # token, rate limit, etc). Our own cache_swr lock already
+          # serializes refreshes machine-wide and TTL (6s) exceeds the
+          # API's rate window (5s), so a real 429 from our own polling
+          # shouldn't happen — no case here is worth freezing a stale
+          # track over. Fall through to Spotify; NONE below if that's
+          # empty too.
           ;;
       esac
     fi
@@ -504,7 +506,7 @@ if command -v pmset >/dev/null 2>&1; then
   bat_pct=$(echo "$pmset_out" | grep -Eo '[0-9]+%' | head -1 | tr -d '%')
   if [[ -n "$bat_pct" ]]; then
     charging=""
-    echo "$pmset_out" | grep -qE 'AC Power|charging' && charging="+"
+    echo "$pmset_out" | grep -qE 'AC Power|\bcharging\b' && charging="+"
     if   (( bat_pct >= 50 )); then bat_color="$GREEN"
     elif (( bat_pct >= 20 )); then bat_color="$YELLOW"
     else                            bat_color="$RED"
@@ -577,7 +579,8 @@ render_bar_row() {
 emit_narrow_rows() {
   local max_w=$(( term_cols - 4 ))   # account for "├─ " prefix
   (( max_w < 20 )) && max_w=20
-  local line="" line_w=0 seg seg_w sep_w=3   # " · " separator
+  local line="" line_w=0 seg seg_w sep_w
+  sep_w=$(visible_len "$SEP")
   for seg in "$@"; do
     [[ -z "$seg" ]] && continue
     seg_w=$(visible_len "$seg")
@@ -636,7 +639,7 @@ verdict="status: ${status_v}${SEP}vibes: ${vibes_v}"
 [[ -n "$music" ]] && verdict="${verdict}${SEP}${music}"
 
 # ── Render ─────────────────────────────────────────────────────────────
-header="${DIM}${user}${RESET} ${BLUE}${cwd}${RESET} ${model}"
+header="${DIM}${user}${RESET} ${BLUE}$(trunc "$cwd" 40)${RESET} ${model}"
 [[ -n "$effort" ]] && header="${header} ${MAGENTA}(${effort})${RESET}"
 printf '%s┌─%s %b\n' "$ORANGE" "$RESET" "$header"
 
