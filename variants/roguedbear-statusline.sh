@@ -639,7 +639,7 @@ verdict="status: ${status_v}${SEP}vibes: ${vibes_v}"
 [[ -n "$music" ]] && verdict="${verdict}${SEP}${music}"
 
 # ── Render ─────────────────────────────────────────────────────────────
-header="${DIM}${user}${RESET} ${BLUE}$(trunc "$cwd" 40)${RESET} ${model}"
+header="${DIM}${user}${RESET} ${BLUE}${cwd}${RESET} ${model}"
 [[ -n "$effort" ]] && header="${header} ${MAGENTA}(${effort})${RESET}"
 printf '%s┌─%s %b\n' "$ORANGE" "$RESET" "$header"
 
