@@ -286,7 +286,11 @@ cache_swr() {
       (
         local tmp="$file.tmp.$$"
         trap 'rm -f "$tmp"; rmdir "$lock" 2>/dev/null' EXIT
-        "$fn" > "$tmp" 2>/dev/null && mv "$tmp" "$file"
+        # An empty result means "no answer this tick" (curl|tr swallows a
+        # failed request's exit code; no Fable token/limit prints nothing
+        # but still exits 0) — keep the previous value instead of blanking
+        # the segment until the next successful refresh.
+        "$fn" > "$tmp" 2>/dev/null && [[ -s "$tmp" ]] && mv "$tmp" "$file"
       ) >/dev/null 2>&1 &
       disown 2>/dev/null || true
     fi
@@ -506,7 +510,7 @@ if command -v pmset >/dev/null 2>&1; then
   bat_pct=$(echo "$pmset_out" | grep -Eo '[0-9]+%' | head -1 | tr -d '%')
   if [[ -n "$bat_pct" ]]; then
     charging=""
-    echo "$pmset_out" | grep -qE 'AC Power|\bcharging\b' && charging="+"
+    echo "$pmset_out" | grep -qE 'AC Power|; charging;|; charged;' && charging="+"
     if   (( bat_pct >= 50 )); then bat_color="$GREEN"
     elif (( bat_pct >= 20 )); then bat_color="$YELLOW"
     else                            bat_color="$RED"
