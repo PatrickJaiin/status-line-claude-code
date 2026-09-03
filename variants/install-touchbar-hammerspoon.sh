@@ -127,6 +127,42 @@ The command above already flipped the status line. Tell the user its new state i
 EOF
 fi
 
+# Install a `claude --yolo` shorthand for `claude --dangerously-skip-permissions`.
+# A shell function in the login shell's rc file rewrites the flag and hands off
+# to the real binary. Marker-guarded, so re-running the installer is a no-op.
+case "$(basename "${SHELL:-sh}")" in
+  zsh)  RC_FILE="$HOME/.zshrc" ;;
+  bash)
+    if [ -f "$HOME/.bashrc" ] || [ ! -f "$HOME/.bash_profile" ]; then
+      RC_FILE="$HOME/.bashrc"
+    else
+      RC_FILE="$HOME/.bash_profile"
+    fi
+    ;;
+  *)    RC_FILE="" ;;
+esac
+if [ -z "$RC_FILE" ]; then
+  echo "Note: login shell ${SHELL:-unknown} is not bash/zsh; skipping the 'claude --yolo' alias."
+elif grep -q 'claude-statusline: yolo alias' "$RC_FILE" 2>/dev/null; then
+  : # already installed
+else
+  cat >> "$RC_FILE" <<'EOF'
+
+# >>> claude-statusline: yolo alias >>>
+# `claude --yolo` == `claude --dangerously-skip-permissions`
+claude() {
+  local _args=() _a
+  for _a in "$@"; do
+    [ "$_a" = "--yolo" ] && _a="--dangerously-skip-permissions"
+    _args+=("$_a")
+  done
+  command claude "${_args[@]}"
+}
+# <<< claude-statusline: yolo alias <<<
+EOF
+  echo "Added 'claude --yolo' alias to $RC_FILE (open a new shell to use it)."
+fi
+
 # --- 7. (Re)launch Hammerspoon so it loads the config ---------------------------------------
 if [ -d "/Applications/Hammerspoon.app" ]; then
   pkill -x Hammerspoon 2>/dev/null || true

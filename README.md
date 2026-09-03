@@ -162,6 +162,20 @@ text, so there's no clickable button — but the Touch Bar variant has real tap
 controls: `⌁` in the Control Strip opens the bar, `✕` hides it, and the toggle
 above additionally blanks the pills until you switch back on.
 
+## `claude --yolo`
+
+Every Claude Code installer also adds a tiny shell function to your login
+shell's rc file (`~/.zshrc`, or `~/.bashrc` / `~/.bash_profile` for bash) so that
+
+```sh
+claude --yolo
+```
+
+runs `claude --dangerously-skip-permissions`. Any other arguments pass through
+untouched (`claude --yolo -p "fix the tests"` works). The block is marker-guarded
+so re-running an installer never duplicates it; open a new shell after installing.
+Other login shells (fish, etc.) are skipped with a note.
+
 ## Codex presets
 
 Codex's footer is a fixed list of [built-in fields](https://developers.openai.com/codex/config-reference/#tui),
