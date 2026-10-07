@@ -46,6 +46,11 @@ fi
 
 input=$(cat)
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "roguedbear-statusline: jq not found (install it: brew/apt/pacman install jq)"
+  exit 0
+fi
+
 # ── Inputs ─────────────────────────────────────────────────────────────
 user=$(whoami)
 cwd=$(jq -r '.workspace.current_dir // ""'                              <<<"$input")
@@ -216,7 +221,28 @@ refresh_fable_usage() {
     | jq -r 'first(.limits[]? | select(.kind=="weekly_scoped" and ((.scope.model.display_name // "") | ascii_downcase | contains("fable")))) // {} | if .percent == null then empty else "\(.percent)|\(.resets_at // "")" end'
 }
 
+refresh_sysstat_linux() {
+  # Output: "cpu_pct|ram_pct". CPU is busy time over a 0.5s /proc/stat window;
+  # RAM is (MemTotal - MemAvailable) / MemTotal, i.e. excluding reclaimable cache.
+  local cpu_line1 cpu_line2 cpu
+  cpu_line1=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat 2>/dev/null)
+  sleep 0.5
+  cpu_line2=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat 2>/dev/null)
+  cpu=$(awk -v a="$cpu_line1" -v b="$cpu_line2" 'BEGIN {
+    split(a, x, " "); split(b, y, " ")
+    dt = y[1] - x[1]; di = y[2] - x[2]
+    printf "%d", (dt > 0) ? (dt - di) * 100 / dt : 0 }')
+  awk -v cpu="$cpu" '
+    /^MemTotal:/     { t = $2 }
+    /^MemAvailable:/ { a = $2 }
+    END { printf "%d|%d", cpu, (t > 0) ? (t - a) * 100 / t : 0 }' /proc/meminfo 2>/dev/null
+}
+
 refresh_sysstat() {
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    refresh_sysstat_linux
+    return
+  fi
   # Output: "cpu_pct|ram_pct"
   #
   # CPU: `-l 2`'s second sample is the instantaneous reading (the first reports
@@ -305,6 +331,20 @@ OSA
     fi
   fi
 
+  # ── Linux: any MPRIS player via playerctl ──
+  if command -v playerctl >/dev/null 2>&1 \
+     && [[ "$(playerctl status 2>/dev/null)" == "Playing" ]]; then
+    raw=$(playerctl metadata --format '{{artist}} — {{title}}||{{position}}||{{mpris:length}}' 2>/dev/null)
+    if [[ -n "$raw" ]]; then
+      track=${raw%%"||"*}
+      rest=${raw#*"||"}
+      pos=${rest%%"||"*};  pos=$(( ${pos:-0} / 1000000 ))
+      dur=${rest#*"||"};   dur=$(( ${dur:-0} / 1000000 ))
+      printf 'SPOT|%s|%s|%s|%s' "$track" "$pos" "$dur" "$now_epoch"
+      return 0
+    fi
+  fi
+
   return 1   # no music data — let cache_swr preserve previous value
 }
 
@@ -353,6 +393,22 @@ if command -v pmset >/dev/null 2>&1; then
     fi
     bat_str="bat ${bat_pct}%${charging}"
   fi
+fi
+
+if [[ -z "$bat_str" && -d /sys/class/power_supply ]]; then
+  for bat_dir in /sys/class/power_supply/BAT*; do
+    [[ -r "$bat_dir/capacity" ]] || continue
+    bat_pct=$(cat "$bat_dir/capacity" 2>/dev/null)
+    [[ "$bat_pct" =~ ^[0-9]+$ ]] || continue
+    charging=""
+    [[ "$(cat "$bat_dir/status" 2>/dev/null)" =~ ^(Charging|Full)$ ]] && charging="+"
+    if   (( bat_pct >= 50 )); then bat_color="$GREEN"
+    elif (( bat_pct >= 20 )); then bat_color="$YELLOW"
+    else                            bat_color="$RED"
+    fi
+    bat_str="bat ${bat_pct}%${charging}"
+    break
+  done
 fi
 
 music=""

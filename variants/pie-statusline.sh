@@ -28,6 +28,11 @@ fi
 
 input=$(cat)
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "pie-statusline: jq not found (install it: brew/apt/pacman install jq)"
+  exit 0
+fi
+
 ctx_used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 five_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
 five_resets=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
@@ -159,13 +164,23 @@ if command -v pmset >/dev/null 2>&1; then
   bat_pct=$(echo "$pmset_out" | grep -Eo '[0-9]+%' | head -1 | tr -d '%')
   if echo "$pmset_out" | grep -qE 'AC Power|charging'; then bat_charging="+"; fi
 fi
+# Linux: first battery under /sys/class/power_supply
+if [ -z "$bat_pct" ]; then
+  for bat_dir in /sys/class/power_supply/BAT*; do
+    [ -r "$bat_dir/capacity" ] || continue
+    bat_pct=$(cat "$bat_dir/capacity" 2>/dev/null)
+    case "$bat_pct" in ''|*[!0-9]*) bat_pct=""; continue ;; esac
+    case "$(cat "$bat_dir/status" 2>/dev/null)" in Charging|Full) bat_charging="+" ;; esac
+    break
+  done
+fi
 
 # CPU + RAM via `top -l 2 -n 0`. The SECOND sample is the instantaneous reading;
 # the first reports usage averaged since boot. Two samples take ~2-3s, so we read
 # a cached value and refresh in the background — the render never blocks on top.
 cpu_pct=""
 ram_pct=""
-if command -v top >/dev/null 2>&1; then
+if command -v top >/dev/null 2>&1 || [ -r /proc/stat ]; then
   sysstat_cache="/tmp/.claude_pie_sysstat"
   sysstat_ts_cache="/tmp/.claude_pie_sysstat_ts"
   sys_now=$(date +%s)
@@ -175,6 +190,21 @@ if command -v top >/dev/null 2>&1; then
     # Refresh in the background; this render uses whatever is already cached.
     # stdout/stderr → /dev/null so the child never holds the render's pipe open.
     {
+      if [ -r /proc/stat ] && [ -r /proc/meminfo ]; then
+        # Linux: CPU busy time over a 0.5s /proc/stat window; RAM excludes
+        # reclaimable cache (MemTotal - MemAvailable).
+        c1=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
+        sleep 0.5
+        c2=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
+        cpu=$(awk -v a="$c1" -v b="$c2" 'BEGIN {
+          split(a, x, " "); split(b, y, " ")
+          dt = y[1] - x[1]; di = y[2] - x[2]
+          printf "%d", (dt > 0) ? (dt - di) * 100 / dt : 0 }')
+        sval=$(awk -v cpu="$cpu" '
+          /^MemTotal:/     { t = $2 }
+          /^MemAvailable:/ { a = $2 }
+          END { printf "%d|%d", cpu, (t > 0) ? (t - a) * 100 / t : 0 }' /proc/meminfo)
+      else
       # CPU: `-l 2`'s second sample is the instantaneous reading (the first
       # reports usage averaged since boot). Keep the last idle figure.
       idle=$(top -l 2 -n 0 2>/dev/null | awk '
@@ -204,6 +234,7 @@ if command -v top >/dev/null 2>&1; then
           pct  = (total > 0) ? used * 100 / total : 0
           printf "%d|%d", cpu, pct
         }')
+      fi
       printf '%s' "$sval" > "$sysstat_cache.tmp" 2>/dev/null \
         && mv "$sysstat_cache.tmp" "$sysstat_cache" 2>/dev/null
       printf '%s' "$sys_now" > "$sysstat_ts_cache" 2>/dev/null
@@ -237,6 +268,17 @@ APPLESCRIPT
       if [ ${#raw} -gt 36 ]; then spotify_track="$(printf '%.33s' "$raw")…"
       else                        spotify_track="$raw"
       fi
+    fi
+  fi
+fi
+
+# Linux: any MPRIS player via playerctl
+if [ -z "$spotify_track" ] && command -v playerctl >/dev/null 2>&1 \
+   && [ "$(playerctl status 2>/dev/null)" = "Playing" ]; then
+  raw=$(playerctl metadata --format '{{artist}} — {{title}}' 2>/dev/null)
+  if [ -n "$raw" ]; then
+    if [ ${#raw} -gt 36 ]; then spotify_track="$(printf '%.33s' "$raw")…"
+    else                        spotify_track="$raw"
     fi
   fi
 fi
